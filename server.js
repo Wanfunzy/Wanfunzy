@@ -1546,7 +1546,11 @@ function confirmOrderPaidAndFulfill(order, data) {
           `🆔 MooGold Order: ${fulfillResult.moogoldOrderId || '(processing)'}\n` +
           `✅ Diamond កំពុងបញ្ចូល!`
         );
-        if (fulfillResult.status === 'processing' || fulfillResult.status === 'processing') {
+        // [FIX] MooGold create_order success returns status:true (boolean),
+        // not 'processing' — the old check never matched, so polling never
+        // started and orders stayed "confirmed" forever without flipping to
+        // "delivered". Poll in every non-final case instead.
+        if (fulfillResult.status !== 'completed' && fulfillResult.status !== 'duplicate-ignored') {
           pollMooGoldOrderStatus(order.code, fulfillResult.moogoldOrderId).catch(e => console.error('[MooGold] poll start error:', e.message));
         }
       } else {
