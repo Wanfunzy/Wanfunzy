@@ -638,6 +638,26 @@ var done = false;
 // Users see feedback either way instead of a mysteriously hidden button.
 var deepEl = document.getElementById('khqrPayDeeplink');
 var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints || 0) > 1;
+
+// [FIX] This was previously described in the comments above ("Fetched
+// asynchronously...") but the actual fetch call was never written — the
+// button always fell straight to the clipboard-copy fallback and the
+// per-bank buttons used guessed custom URL schemes (e.g.
+// 'abamobilebank://qr?data={qr}') that ABA/Wing/ACLEDA do not actually
+// support, which is why tapping "ABA" just opened the app with nothing
+// pre-filled. This now calls our own /api/topup/orders/deeplink route,
+// which calls Bakong's official generate_deeplink_by_qr API and returns
+// a validated bakong.page.link universal link that Bakong itself routes
+// into whichever compatible bank app is installed, with the transaction
+// pre-loaded.
+var resolvedDeeplink = null;
+var deeplinkRequest = (khqrData.payToken && isMobile)
+? fetch('/api/topup/orders/deeplink?code=' + encodeURIComponent(orderCode) + '&t=' + encodeURIComponent(khqrData.payToken))
+.then(function (r) { return r.json(); })
+.then(function (j) { if (j && j.ok && j.deeplink) resolvedDeeplink = j.deeplink; return resolvedDeeplink; })
+.catch(function () { return null; })
+: Promise.resolve(null);
+
 if (deepEl) {
 if (!isMobile) {
 // Desktop: no way to launch a mobile bank app — turn the button into
@@ -659,6 +679,20 @@ deepEl.addEventListener('click', function (e) { e.preventDefault(); });
 deepEl.textContent = '📱 Preparing link…';
 deepEl.style.opacity = '0.85';
 
+deeplinkRequest.then(function (link) {
+if (done) return; // modal already closed/paid — don't touch a torn-down UI
+if (link) {
+deepEl.textContent = '📱 Open Bank App →';
+deepEl.style.opacity = '1';
+deepEl.onclick = function (e) {
+e.preventDefault();
+window.location.href = link;
+};
+} else {
+setupCopyFallback();
+}
+});
+
 function setupCopyFallback() {
 deepEl.textContent = '📋 Copy code & paste in bank app';
 deepEl.style.opacity = '1';
@@ -679,7 +713,14 @@ deepEl.textContent = '📱 Scan the QR with your bank app';
 });
 }
 
-// Build bank buttons dynamically from admin config (window._WANFUNZY_BANKS)
+// Build bank buttons dynamically from admin config (window._WANFUNZY_BANKS).
+// These are visual shortcuts only — Bakong's deeplink is bank-agnostic
+// (one universal link routes into whichever app is installed), so every
+// button below uses the SAME resolved Bakong link once it's ready. The
+// per-bank 'scheme' field is kept only as a last-resort guess for the
+// rare case the Bakong deeplink API itself is unavailable; it is not
+// guaranteed to work since these schemes aren't officially published by
+// the banks.
 var qrData = encodeURIComponent(khqrData.qr);
 var bankPicker = document.getElementById('khqrBankPicker');
 var bankRow = document.getElementById('bankButtonsRow');
@@ -706,28 +747,32 @@ if (bankPicker && bankRow && BANK_BUTTONS.length > 0) {
     label.style.cssText = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;';
     btn.appendChild(label);
     btn.addEventListener('click', function(e) {
-      // Copy QR to clipboard first (always works even if scheme fails)
+      e.preventDefault();
+      // Copy QR to clipboard first (always works even if the deeplink fails)
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(khqrData.qr).catch(function() {});
       }
-      // Try to open bank app
-      if (bank.scheme) {
-        e.preventDefault();
+      // [FIX] Prefer the real Bakong-issued universal link (validated,
+      // pre-loads the transaction). Only fall back to the guessed
+      // per-bank scheme if Bakong's deeplink genuinely isn't available.
+      if (resolvedDeeplink) {
+        window.location.href = resolvedDeeplink;
+      } else if (bank.scheme) {
         var deeplink = bank.scheme.replace('{qr}', qrData);
         window.location.href = deeplink;
         setTimeout(function() {
           var deepEl2 = document.getElementById('khqrPayDeeplink');
           if (deepEl2) deepEl2.textContent = '✅ Code copied — paste in ' + bank.name;
         }, 500);
+      } else {
+        var deepEl3 = document.getElementById('khqrPayDeeplink');
+        if (deepEl3) deepEl3.textContent = '✅ Code copied — paste in ' + bank.name;
       }
     });
     bankRow.appendChild(btn);
   });
   bankPicker.style.display = 'block';
 }
-
-// Copy fallback for the purple button below
-setupCopyFallback();
 }
 }
 // [BUG-1 FIX] Clear any stale QR from a prior package selection.
@@ -832,14 +877,79 @@ done = true;
 clearInterval(countdown);
 if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
 if (paid) {
-statusEl.textContent = T.khqr_auto_paid;
-statusEl.style.color = '#38d980';
-setTimeout(function () { window.location.href = confirmUrl + '&paid=1'; }, 1200);
+// Bakong-style full-screen success splash, then redirect to confirmation.
+showPaidSuccess();
+setTimeout(function () { window.location.href = confirmUrl + '&paid=1'; }, 2800);
 } else {
 statusEl.textContent = T.khqr_auto_expired;
 timerEl.textContent = '';
 goBtn.style.display = 'inline-block';
 }
+}
+
+// ── ទូទាត់ជោគជ័យ overlay (Bakong-app style) ─────────────────────────────
+// Full-screen green splash: animated checkmark ring, amount, order code,
+// and a "Diamond កំពុងបញ្ចូល..." line so the customer knows delivery is
+// already in motion. Built entirely in JS — no HTML template changes.
+// Haptic buzz on supported phones. finish() redirects 2.8s later.
+function showPaidSuccess() {
+if (!document.getElementById('wfPaidCss')) {
+var css = document.createElement('style');
+css.id = 'wfPaidCss';
+css.textContent =
+'@keyframes wfFadeIn{from{opacity:0}to{opacity:1}}' +
+'@keyframes wfPop{0%{transform:scale(.4);opacity:0}70%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}' +
+'@keyframes wfDraw{to{stroke-dashoffset:0}}' +
+'@keyframes wfRise{from{transform:translateY(14px);opacity:0}to{transform:translateY(0);opacity:1}}' +
+'@keyframes wfSpin{to{transform:rotate(360deg)}}';
+document.head.appendChild(css);
+}
+
+// Vibrate: short double-buzz like real payment apps (best-effort).
+try { if (navigator.vibrate) navigator.vibrate([60, 40, 60]); } catch (e) {}
+
+var ov = document.createElement('div');
+ov.id = 'wfPaidOverlay';
+ov.style.cssText =
+'position:fixed;top:0;left:0;right:0;bottom:0;z-index:999999;display:flex;flex-direction:column;' +
+'align-items:center;justify-content:center;text-align:center;color:#fff;' +
+'background:linear-gradient(165deg,#0ba360 0%,#12b76a 55%,#3cba92 100%);' +
+'animation:wfFadeIn .25s ease;padding:24px;font-family:inherit;';
+
+var billEl2 = document.getElementById('khqrPayBillCode');
+ov.innerHTML =
+'<div style="animation:wfPop .45s cubic-bezier(.34,1.56,.64,1) both;">' +
+  '<svg width="110" height="110" viewBox="0 0 110 110" fill="none">' +
+    '<circle cx="55" cy="55" r="50" fill="rgba(255,255,255,.18)"/>' +
+    '<circle cx="55" cy="55" r="42" fill="#fff"/>' +
+    '<path d="M36 56 L50 70 L76 42" stroke="#0ba360" stroke-width="8" ' +
+      'stroke-linecap="round" stroke-linejoin="round" fill="none" ' +
+      'stroke-dasharray="60" stroke-dashoffset="60" ' +
+      'style="animation:wfDraw .5s ease .35s forwards;"/>' +
+  '</svg>' +
+'</div>' +
+'<div style="font-size:26px;font-weight:800;margin-top:18px;animation:wfRise .4s ease .25s both;">' +
+  'ទូទាត់ជោគជ័យ!' +
+'</div>' +
+'<div style="font-size:34px;font-weight:900;margin-top:6px;letter-spacing:.5px;animation:wfRise .4s ease .35s both;">' +
+  '$' + selectedPrice.toFixed(2) + ' USD' +
+'</div>' +
+'<div style="font-size:14px;opacity:.92;margin-top:10px;animation:wfRise .4s ease .45s both;">' +
+  '\uD83D\uDD16 ' + (billEl2 ? billEl2.textContent : '') +
+'</div>' +
+'<div style="display:flex;align-items:center;gap:8px;margin-top:22px;font-size:15px;font-weight:600;animation:wfRise .4s ease .55s both;">' +
+  '<span style="display:inline-block;width:14px;height:14px;border:2.5px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:wfSpin 1s linear infinite;"></span>' +
+  '\uD83D\uDC8E Diamond កំពុងបញ្ចូលទៅគណនី...' +
+'</div>' +
+'<div style="font-size:12px;opacity:.75;margin-top:26px;animation:wfRise .4s ease .65s both;">' +
+  'កំពុងបញ្ជូនទៅទំព័របញ្ជាក់...' +
+'</div>';
+
+document.body.appendChild(ov);
+// Hide the KHQR modal underneath so nothing peeks around the edges.
+var m2 = document.getElementById('khqrPayModal');
+if (m2) m2.style.display = 'none';
+document.body.style.overflow = 'hidden';
 }
 
 function poll() {
