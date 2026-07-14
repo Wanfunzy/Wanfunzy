@@ -194,11 +194,8 @@ ${logoHtml}
 </div>
 </div>
 
-<!-- Step 1 — Account info (step number badge removed per owner request) -->
+<!-- Step 1 — Account info (step number badge + title removed per owner request) -->
 <div class="sp-panel" id="panelStep1">
-<div class="sp-step-head">
-<h3>${t(lang, 'step1_title')}</h3>
-</div>
 <div class="form-row" id="formRow">
 <div class="field">
 <label for="playerId">Player ID</label>
@@ -215,12 +212,9 @@ ${logoHtml}
 <button type="button" class="btn btn-primary btn-full" id="validateBtn">${t(lang, 'btn_validate')}</button>
 </div>
 
-<!-- Step 2 — Packages (step number badge removed per owner request) -->
+<!-- Step 2 — Packages (step number badge + title + hint text removed per owner request) -->
 <div class="sp-panel sp-locked" id="panelStep2">
-<div class="sp-step-head">
-<h3>${t(lang, 'step2_title')}</h3>
-</div>
-<p class="sp-lock-hint" id="pkgHint">${t(lang, 'hint_validate_first')}</p>
+<p class="sp-lock-hint" id="pkgHint" style="display:none;"></p>
 ${passesBand}
 ${firstTopupBand}
 ${bonusDiamondBand}
@@ -317,7 +311,7 @@ const T = {
   err_connect: ${JSON.stringify(t(lang, 'err_connect'))},
   hint_pick_package: ${JSON.stringify(t(lang, 'hint_pick_package'))},
   btn_validated: ${JSON.stringify(t(lang, 'btn_validated'))},
-  hint_validate_first: ${JSON.stringify(t(lang, 'hint_validate_first'))},
+  hint_validate_first: 'សូមបញ្ចូល Player ID ហើយចុច Verify Account ជាមុនសិន',
   btn_buying: ${JSON.stringify(t(lang, 'btn_buying'))},
   btn_buy: ${JSON.stringify(t(lang, 'btn_buy'))},
   khqr_auto_waiting: ${JSON.stringify(t(lang, 'khqr_auto_waiting'))},
