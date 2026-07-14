@@ -257,7 +257,7 @@ ${turnstileSiteKey ? `
      where checkbox sits right before the total/pay row. -->
 <div class="sp-sticky-bar" style="flex-direction:column;gap:8px;padding-bottom:10px;">
   <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;width:100%;font-size:13px;line-height:1.4;">
-    <input type="checkbox" id="agreeTerms" style="margin-top:2px;width:16px;height:16px;flex-shrink:0;accent-color:var(--amber);" />
+    <input type="checkbox" id="agreeTerms" disabled style="margin-top:2px;width:16px;height:16px;flex-shrink:0;accent-color:var(--amber);" />
     <span>${t(lang, 'agree_terms')} <a href="/terms" target="_blank" rel="noopener" style="color:var(--amber);font-weight:700;text-decoration:none;letter-spacing:.4px;">TERMS AND CONDITIONS</a></span>
   </label>
   <div class="field-error" id="err-agree-terms" style="width:100%;"></div>
@@ -477,17 +477,14 @@ document.getElementById('err-validate').classList.add('show');
 document.getElementById('panelStep1').scrollIntoView({ behavior: 'smooth' });
 return;
 }
-if (!isAgreedTerms()) {
-var errAgree = document.getElementById('err-agree-terms');
-if (errAgree) { errAgree.textContent = T.err_agree_terms; errAgree.classList.add('show'); }
-if (agreeTermsEl) agreeTermsEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-return;
-}
 document.querySelectorAll('.sp-pkg-card').forEach(c => c.classList.remove('sp-pkg-selected'));
 card.classList.add('sp-pkg-selected');
 selectedPackageId = card.dataset.packageId;
 selectedPrice = parseFloat(card.dataset.price);
 totalValue.textContent = '$' + selectedPrice.toFixed(2);
+// Package chosen — now unlock the agree-terms checkbox (it stays
+// disabled/unchecked until a package price has been selected).
+if (agreeTermsEl) { agreeTermsEl.disabled = false; }
 buyBtn.disabled = false;
 // Step 3 removed — clicking a package auto-triggers checkout on
 // auto-KHQR sites (Codashop-style: 1 tap = buy). Users still see
