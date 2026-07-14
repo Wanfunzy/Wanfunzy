@@ -252,23 +252,22 @@ ${turnstileSiteKey ? `
 <div class="field-error show" id="err-general"></div>
 </main>
 
-<!-- Terms & Conditions checkbox — must be checked before Buy/Pay works,
-     matching the competitor's (Karina) confirm-before-pay pattern. -->
-<div class="sp-terms-hint" style="padding:12px 16px 90px;font-size:13px;line-height:1.5;">
-  <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;justify-content:center;">
-    <input type="checkbox" id="agreeTerms" style="margin-top:3px;width:16px;height:16px;flex-shrink:0;accent-color:var(--amber);" />
+<!-- Sticky bottom bar: agree-terms checkbox stacked directly above the
+     total + Pay button row, matching the competitor (Karina) layout
+     where checkbox sits right before the total/pay row. -->
+<div class="sp-sticky-bar" style="flex-direction:column;gap:8px;padding-bottom:10px;">
+  <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;width:100%;font-size:13px;line-height:1.4;">
+    <input type="checkbox" id="agreeTerms" style="margin-top:2px;width:16px;height:16px;flex-shrink:0;accent-color:var(--amber);" />
     <span>${t(lang, 'agree_terms')} <a href="/terms" target="_blank" rel="noopener" style="color:var(--amber);font-weight:700;text-decoration:none;letter-spacing:.4px;">TERMS AND CONDITIONS</a></span>
   </label>
-  <div class="field-error" id="err-agree-terms" style="text-align:center;margin-top:6px;"></div>
-</div>
-
-<!-- Sticky bottom total bar -->
-<div class="sp-sticky-bar">
-<div class="sp-total">
-<span class="sp-total-label">${t(lang, 'total_label')}</span>
-<span class="sp-total-value" id="totalValue">$0.00</span>
-</div>
-<button type="button" class="btn btn-primary sp-buy-btn" id="buyBtn" disabled>${t(lang, 'btn_buy')}</button>
+  <div class="field-error" id="err-agree-terms" style="width:100%;"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:12px;">
+    <div class="sp-total">
+    <span class="sp-total-label">${t(lang, 'total_label')}</span>
+    <span class="sp-total-value" id="totalValue">$0.00</span>
+    </div>
+    <button type="button" class="btn btn-primary sp-buy-btn" id="buyBtn" disabled>${t(lang, 'btn_buy')}</button>
+  </div>
 </div>
 
 ${khqrAuto ? `
