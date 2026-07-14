@@ -241,6 +241,7 @@ function gameIcon(iconKey) {
 // opts: { profileImage, lang, t (translator fn), settings, showChangeGame }
 // ---------------------------------------------------------------------
 function renderSiteHeader({ profileImage, lang, t, settings, showChangeGame }) {
+  if (typeof t !== 'function') { t = (l, key) => key; }
   const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
   const social = (settings && settings.socialLinks) || {};
   const socialIcons = (settings && settings.socialIcons) || {};
@@ -322,6 +323,7 @@ ${socialHtml ? `<div class="menu-social">${socialHtml}</div>` : ''}
 // a KHQR image), and a subtle "Powered by Wanfunzy" line. Mirrors the
 // clean footer style of comparable top-up sites.
 function renderSiteFooter({ profileImage, lang, t, settings }) {
+  if (typeof t !== 'function') { t = (l, key) => key; }
   const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
   const social = (settings && settings.socialLinks) || {};
   const socialIcons = (settings && settings.socialIcons) || {};
