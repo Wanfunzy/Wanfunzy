@@ -36,6 +36,7 @@ function t(lang, key) {
 }
 
 function resolveLang(req) {
+  if (!req || !req.headers) return 'km';
   const cookie = (req.headers.cookie || '').split(';').map(c => c.trim()).find(c => c.startsWith('lang='));
   if (cookie) { const v = cookie.split('=')[1]; if (v === 'en' || v === 'km') return v; }
   return 'km';
