@@ -202,7 +202,7 @@ ${logoHtml}
 <input type="text" id="playerId" name="playerId" placeholder="${t(lang, 'ph_player_id')}" inputmode="numeric" autocomplete="off" />
 <div class="field-error" id="err-playerId"></div>
 </div>
-<div class="field" id="serverIdField" style="display:${game.requiresServerId ? '' : 'none'};">
+<div class="field" id="serverIdField" style="display:${(game.requiresServerId || game.id === 'mlbb' || (game.name||'').toLowerCase().includes('mobile legend')) ? '' : 'none'};">
 <label for="serverId">Server ID</label>
 <input type="text" id="serverId" name="serverId" placeholder="${t(lang, 'ph_server_id')}" inputmode="numeric" autocomplete="off" />
 <div class="field-error" id="err-serverId"></div>
@@ -322,7 +322,7 @@ const T = {
 };
 const khqrAuto = ${khqrAuto ? 'true' : 'false'};
 const gameId = ${JSON.stringify(game.id)};
-const needsServerId = ${game.requiresServerId ? 'true' : 'false'};
+const needsServerId = ${(game.requiresServerId || game.id === 'mlbb' || (game.name||'').toLowerCase().includes('mobile legend')) ? 'true' : 'false'};
 // First package with a moogoldProductId — used for validate before user picks one
 const firstPackageId = ${JSON.stringify((packages.find(p => p.moogoldProductId) || packages[0] || {}).id || '')};
 let validated = false;
@@ -386,7 +386,7 @@ validateBtn.textContent = 'កំពុងពិនិត្យ...';
 try {
   const validatePkgId = selectedPackageId || firstPackageId;
   const params = new URLSearchParams({ gameId, playerId });
-  if (serverId) params.append('serverId', serverId);
+  params.append('serverId', serverId || ''); // [FIX] always send serverId
   if (validatePkgId) params.append('packageId', validatePkgId);
   const vRes = await fetch('/api/topup/validate?' + params.toString());
   const vData = await vRes.json();
