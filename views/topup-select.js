@@ -3,7 +3,8 @@
 // and a minimal "Top Up" heading.
 
 const { layout, ICONS, brandEffectCSS, renderSiteHeader, renderSiteFooter } = require('./layout');
-const { t } = require('./i18n');
+const _i18n = require('./i18n');
+const t = (typeof _i18n.t === 'function') ? _i18n.t : function (l, key) { return key; };
 
 function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
