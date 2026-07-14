@@ -175,13 +175,22 @@ async function fulfillWithMooGold(order) {
     return { ok: false, error: `Server/Zone ID ត្រូវតែបញ្ចូលសម្រាប់ game នេះ (${order.gameName || order.gameId})` };
   }
 
+  // [FIX] MLBB User ID format: "592784466(10050)" — Zone ID appended in parentheses.
+  // MooGold checkout uses this combined format. Sending separate Server field
+  // alongside also works as fallback for other games.
+  const isMlbbGame = (order.gameId || '').toLowerCase() === 'mlbb' ||
+                     (order.gameName || '').toLowerCase().includes('mobile legend');
+  const combinedUserId = (isMlbbGame && order.serverId)
+    ? String(order.playerId) + '(' + String(order.serverId) + ')'
+    : String(order.playerId);
+
   const orderData = {
     category:     1,
     'product-id': Number(order.moogoldProductId),
     quantity:     1,
-    'User ID':    String(order.playerId)
+    'User ID':    combinedUserId
   };
-  // [FIX] Always send Server field — MLBB requires Zone ID even if empty
+  // Send Server field too — MooGold accepts either format
   orderData['Server'] = String(order.serverId || '');
 
   console.log('[MooGold] create_order payload:', JSON.stringify({
@@ -916,8 +925,10 @@ async function handleValidatePlayer(req, res, query) {
     return sendJSON(res, 200, { ok: true, username: result.username, message: result.message || '' });
   }
   if (result.ok === false) {
-    console.log('[Validate] MooGold REJECTED — playerId:', playerId, '/', result.message);
-    return sendJSON(res, 200, { ok: false, message: result.message || 'Player ID ឬ Zone ID មិនត្រឹមត្រូវ។' });
+    // [FIX] MooGold validate API rejects some valid Zone IDs (e.g. 10050)
+    // even though MooGold checkout accepts them fine. Don't hard-block —
+    // fall through to hybrid self-confirm so customer can still pay.
+    console.log('[Validate] MooGold rejected (hybrid fallback) — playerId:', playerId, '/', result.message);
   }
   // ok === null — validate unavailable, fall back to manual confirm
   console.log('[Validate] skipped (fallback) — playerId:', playerId, '/ serverId:', serverId);
