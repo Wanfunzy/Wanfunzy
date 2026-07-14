@@ -188,8 +188,13 @@ async function fulfillWithMooGold(order) {
     'Server': order.serverId || '(none)'
   }));
 
-  const signingPayload = { path: 'order/create_order', data: orderData };
+  // [FIX] err 109 "Invalid Signature" — MooGold computes the HMAC over the
+  // full request body that it receives, including partnerOrderId. Signing a
+  // stripped-down object (without partnerOrderId) produces a different JSON
+  // string → different hash → signature mismatch. Sign the exact payload
+  // that will be sent.
   const payload        = { path: 'order/create_order', data: orderData, partnerOrderId: order.code };
+  const signingPayload = payload; // sign exactly what we send
 
   try {
     const result = await moogoldRequest('order/create_order', payload, signingPayload);
@@ -902,8 +907,19 @@ async function handleValidatePlayer(req, res, query) {
   const serverId = (query.serverId || '').trim();
   if (!playerId || !/^[0-9]{4,20}$/.test(playerId)) return sendJSON(res, 400, { ok: false, message: 'Player ID មិនត្រឹមត្រូវ។' });
   if (!serverId || !/^[0-9]{1,6}$/.test(serverId))  return sendJSON(res, 400, { ok: false, message: 'Server ID មិនត្រឹមត្រូវ។' });
-  // Validation skipped — external sources unreliable; customer self-confirms via checkbox.
-  console.log('[Validate] skipped (manual confirm mode) — playerId:', playerId, '/ serverId:', serverId);
+  // Call MooGold product/validate (enabled by MooGold CS for product 15145)
+  const MLBB_MOOGOLD_PRODUCT_ID = '15145';
+  const result = await validateMLBBPlayer(playerId, serverId, MLBB_MOOGOLD_PRODUCT_ID);
+  if (result.ok === true) {
+    console.log('[Validate] MooGold OK — playerId:', playerId, '/ username:', result.username);
+    return sendJSON(res, 200, { ok: true, username: result.username, message: result.message || '' });
+  }
+  if (result.ok === false) {
+    console.log('[Validate] MooGold REJECTED — playerId:', playerId, '/', result.message);
+    return sendJSON(res, 200, { ok: false, message: result.message || 'Player ID ឬ Zone ID មិនត្រឹមត្រូវ។' });
+  }
+  // ok === null — validate unavailable, fall back to manual confirm
+  console.log('[Validate] skipped (fallback) — playerId:', playerId, '/ serverId:', serverId);
   return sendJSON(res, 200, { ok: true, username: '', skipped: true, message: 'សូមបញ្ជាក់ Player ID + Zone ID ខ្លួនឯង ក្នុង Game មុន' });
 }
 
