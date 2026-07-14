@@ -181,8 +181,8 @@ async function fulfillWithMooGold(order) {
     quantity:     1,
     'User ID':    String(order.playerId)
   };
-  // [FIX] Always send Server field to MooGold
-  orderData['Server'] = order.serverId ? String(order.serverId) : '';
+  // [FIX] Always send Server field — MLBB requires Zone ID even if empty
+  orderData['Server'] = String(order.serverId || '');
 
   console.log('[MooGold] create_order payload:', JSON.stringify({
     'product-id': order.moogoldProductId, 'User ID': order.playerId,
@@ -909,7 +909,7 @@ async function handleValidatePlayer(req, res, query) {
   if (!playerId || !/^[0-9]{4,20}$/.test(playerId)) return sendJSON(res, 400, { ok: false, message: 'Player ID មិនត្រឹមត្រូវ។' });
   if (!serverId || !/^[0-9]{1,6}$/.test(serverId))  return sendJSON(res, 400, { ok: false, message: 'Server ID មិនត្រឹមត្រូវ។' });
   // Call MooGold product/validate (enabled by MooGold CS for product 15145)
-  const MLBB_MOOGOLD_PRODUCT_ID = '4700134'; // variation_id for 10+1 Diamonds — correct for product/validate
+  const MLBB_MOOGOLD_PRODUCT_ID = '15145';
   const result = await validateMLBBPlayer(playerId, serverId, MLBB_MOOGOLD_PRODUCT_ID);
   if (result.ok === true) {
     console.log('[Validate] MooGold OK — playerId:', playerId, '/ username:', result.username);
@@ -965,24 +965,16 @@ async function handleOrderDeeplink(req, res, query) {
   if (!crypto.timingSafeEqual(a, b)) return sendJSON(res, 404, { ok: false, error: 'Not found' });
   // Return cached deeplink if already built
   if (order.khqr.deeplink) return sendJSON(res, 200, { ok: true, deeplink: order.khqr.deeplink });
-
-  // Build ABA Pay deeplink directly from the KHQR EMV string.
-  // Bakong generate_deeplink_by_qr API requires commercial merchant tier
-  // (returns errorCode 4 for individual/developer accounts) so we skip it.
-  // ABA Pay app supports the URI scheme:
-  //   abamobilebank://aba_pay?qr=<EMV_KHQR_STRING>
-  // On iOS/Android, window.open(link, '_blank') hands this to the ABA app
-  // which opens directly on the QR payment confirmation screen.
+  // Build ABA Pay deeplink directly from KHQR string (no Bakong API needed)
+  // Format: abamobilebank://aba_pay?qr=<EMV_KHQR>
+  // Client uses location.href to trigger — iOS hands custom scheme to ABA app
+  // which opens on QR payment screen with merchant name + amount pre-filled.
   const qrString = order.khqr && order.khqr.qr;
-  if (!qrString) {
-    console.log('[KHQR] no QR string for order:', code);
-    return sendJSON(res, 200, { ok: true, deeplink: null });
-  }
+  if (!qrString) return sendJSON(res, 200, { ok: true, deeplink: null });
   const abaDeeplink = 'abamobilebank://aba_pay?qr=' + encodeURIComponent(qrString);
-  // Cache so subsequent calls return instantly without rebuilding
   order.khqr.deeplink = abaDeeplink;
   db.writeDB(data);
-  console.log('[KHQR] ABA deeplink built for order:', code, '| qr bytes:', Buffer.byteLength(qrString));
+  console.log('[KHQR] ABA deeplink built for', code, '| qr bytes:', Buffer.byteLength(qrString));
   sendJSON(res, 200, { ok: true, deeplink: abaDeeplink });
 }
 
@@ -1697,18 +1689,6 @@ const server = http.createServer(async (req, res) => {
 //  Boot
 // ─────────────────────────────────────────────
 db.ensureDataFile();
-// [FIX] Ensure MLBB always has requiresServerId=true in DB
-try {
-  const _d = db.readDB();
-  let _changed = false;
-  (_d.games || []).forEach(function(g) {
-    if ((g.id === "mlbb" || (g.name||"").toLowerCase().includes("mobile legend")) && !g.requiresServerId) {
-      g.requiresServerId = true; _changed = true;
-      console.log("[Boot] Set requiresServerId=true for game:", g.id);
-    }
-  });
-  if (_changed) db.writeDB(_d);
-} catch(e) { console.error("[Boot] requiresServerId fix failed:", e.message); }
 db.ensureUploadsDir();
 server.listen(PORT, () => {
   console.log(`Wanfunzy server running → http://localhost:${PORT}`);
