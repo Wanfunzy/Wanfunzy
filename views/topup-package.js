@@ -252,10 +252,14 @@ ${turnstileSiteKey ? `
 <div class="field-error show" id="err-general"></div>
 </main>
 
-<!-- Terms & Conditions link — small, unobtrusive line just above the
-     sticky bar. Clicking Buy Now implies acceptance of these terms. -->
-<div class="sp-terms-hint" style="text-align:center;padding:12px 16px 90px;font-size:13px;line-height:1.5;">
-  <a href="/terms" target="_blank" rel="noopener" style="color:var(--amber);font-weight:700;text-decoration:none;letter-spacing:.4px;">TERMS AND CONDITIONS</a>
+<!-- Terms & Conditions checkbox — must be checked before Buy/Pay works,
+     matching the competitor's (Karina) confirm-before-pay pattern. -->
+<div class="sp-terms-hint" style="padding:12px 16px 90px;font-size:13px;line-height:1.5;">
+  <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;justify-content:center;">
+    <input type="checkbox" id="agreeTerms" style="margin-top:3px;width:16px;height:16px;flex-shrink:0;accent-color:var(--amber);" />
+    <span>${t(lang, 'agree_terms')} <a href="/terms" target="_blank" rel="noopener" style="color:var(--amber);font-weight:700;text-decoration:none;letter-spacing:.4px;">TERMS AND CONDITIONS</a></span>
+  </label>
+  <div class="field-error" id="err-agree-terms" style="text-align:center;margin-top:6px;"></div>
 </div>
 
 <!-- Sticky bottom total bar -->
@@ -320,7 +324,8 @@ const T = {
   khqr_auto_waiting: ${JSON.stringify(t(lang, 'khqr_auto_waiting'))},
   khqr_auto_paid: ${JSON.stringify(t(lang, 'khqr_auto_paid'))},
   khqr_auto_expired: ${JSON.stringify(t(lang, 'khqr_auto_expired'))},
-  khqr_auto_time_left: ${JSON.stringify(t(lang, 'khqr_auto_time_left'))}
+  khqr_auto_time_left: ${JSON.stringify(t(lang, 'khqr_auto_time_left'))},
+  err_agree_terms: ${JSON.stringify(t(lang, 'err_agree_terms'))}
 };
 const khqrAuto = ${khqrAuto ? 'true' : 'false'};
 const gameId = ${JSON.stringify(game.id)};
@@ -328,6 +333,14 @@ const needsServerId = ${game.requiresServerId ? 'true' : 'false'};
 // First package with a moogoldProductId — used for validate before user picks one
 const firstPackageId = ${JSON.stringify((packages.find(p => p.moogoldProductId) || packages[0] || {}).id || '')};
 let validated = false;
+var agreeTermsEl = document.getElementById('agreeTerms');
+function isAgreedTerms() { return !!(agreeTermsEl && agreeTermsEl.checked); }
+if (agreeTermsEl) {
+  agreeTermsEl.addEventListener('change', function () {
+    var errEl = document.getElementById('err-agree-terms');
+    if (isAgreedTerms() && errEl) { errEl.textContent = ''; errEl.classList.remove('show'); }
+  });
+}
 let playerId = '';
 let serverId = '';
 let selectedPackageId = null;
@@ -465,6 +478,12 @@ document.getElementById('err-validate').classList.add('show');
 document.getElementById('panelStep1').scrollIntoView({ behavior: 'smooth' });
 return;
 }
+if (!isAgreedTerms()) {
+var errAgree = document.getElementById('err-agree-terms');
+if (errAgree) { errAgree.textContent = T.err_agree_terms; errAgree.classList.add('show'); }
+if (agreeTermsEl) agreeTermsEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+return;
+}
 document.querySelectorAll('.sp-pkg-card').forEach(c => c.classList.remove('sp-pkg-selected'));
 card.classList.add('sp-pkg-selected');
 selectedPackageId = card.dataset.packageId;
@@ -541,6 +560,12 @@ buyBtn.addEventListener('click', async function () {
 // above. (JS is single-threaded, but click events queue up — the
 // browser dispatches them one after the other with no yield in between.)
 if (submissionInFlight) return;
+if (!isAgreedTerms()) {
+var errAgree2 = document.getElementById('err-agree-terms');
+if (errAgree2) { errAgree2.textContent = T.err_agree_terms; errAgree2.classList.add('show'); }
+if (agreeTermsEl) agreeTermsEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+return;
+}
 submissionInFlight = true;
 buyBtn.disabled = true;
 buyBtn.textContent = T.btn_buying;
