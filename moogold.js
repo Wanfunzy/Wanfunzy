@@ -1,3 +1,2 @@
-// moogold.js — compatibility shim
-// MooGold logic is fully built into server.js.
+// moogold.js — shim (MooGold logic is built into server.js)
 module.exports = {};
