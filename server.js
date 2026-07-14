@@ -364,6 +364,7 @@ function escapeHtml(str) {
 }
 
 function parseCookies(req) {
+  if (!req || !req.headers) return {};
   const out = {};
   (req.headers.cookie || '').split(';').forEach(pair => {
     const idx = pair.indexOf('=');
