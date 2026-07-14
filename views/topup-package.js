@@ -706,7 +706,7 @@ deepEl.textContent = '📱 Open Bank App →';
 deepEl.style.opacity = '1';
 deepEl.onclick = function (e) {
 e.preventDefault();
-window.location.href = link;
+window.open(link, '_blank');
 };
 } else {
 setupCopyFallback();
@@ -747,6 +747,8 @@ var bankRow = document.getElementById('bankButtonsRow');
 var BANK_BUTTONS = window._WANFUNZY_BANKS || [];
 
 if (bankPicker && bankRow && BANK_BUTTONS.length > 0) {
+  // [FIX] Clear stale buttons from prior package selection — prevents duplicates
+  bankRow.innerHTML = '';
   BANK_BUTTONS.forEach(function(bank) {
     var btn = document.createElement('a');
     btn.href = '#';
@@ -768,29 +770,26 @@ if (bankPicker && bankRow && BANK_BUTTONS.length > 0) {
     btn.appendChild(label);
     btn.addEventListener('click', function(e) {
       e.preventDefault();
-      // Copy QR to clipboard first (always works even if the deeplink fails)
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(khqrData.qr).catch(function() {});
-      }
-      // [FIX 2026-07-13] Only ever navigate using the real Bakong-issued
-      // universal link (validated, pre-loads the transaction). The old
-      // "guessed" per-bank scheme (e.g. 'abamobilebank://qr?data={qr}')
-      // is NOT an officially supported deeplink — tapping it just threw
-      // the customer onto the bank app's blank home dashboard with no
-      // payment loaded, which is exactly the bug being reported. When no
-      // real deeplink is available, fall back to copy-to-clipboard + a
-      // clear instruction — every Cambodian banking app supports
-      // pasting a KHQR string via its own "Scan QR" screen, so this
-      // path always results in a payable screen even when Bakong's
-      // deeplink API is unavailable (e.g. unverified merchant account).
+      // [FIX] Use window.open('_blank') so iOS hands the custom URI scheme
+      // to the ABA app instead of treating it as a page navigation.
       if (resolvedDeeplink) {
-        window.location.href = resolvedDeeplink;
-      } else {
-        var deepEl3 = document.getElementById('khqrPayDeeplink');
-        if (deepEl3) deepEl3.textContent = '✅ Code បានចម្លង — បើក ' + bank.name + ' ជ្រើស Scan/Paste QR';
-        var statusEl2 = document.getElementById('khqrPayStatus');
-        if (statusEl2) statusEl2.textContent = '📋 QR Code បានចម្លងទៅ Clipboard — បើក App ' + bank.name + ' → ជ្រើសរើស "ស្កេន QR" → Paste';
+        window.open(resolvedDeeplink, '_blank');
+        return;
       }
+      // Deeplink may still be resolving — wait then open
+      deeplinkRequest.then(function(link) {
+        if (link) {
+          window.open(link, '_blank');
+        } else {
+          // Clipboard fallback — paste in bank app Scan QR screen
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(khqrData.qr).then(function() {
+              var deepEl3 = document.getElementById('khqrPayDeeplink');
+              if (deepEl3) deepEl3.textContent = '✅ Code បានចម្លង — បើក ' + bank.name + ' → Scan QR → Paste';
+            }).catch(function() {});
+          }
+        }
+      });
     });
     bankRow.appendChild(btn);
   });
