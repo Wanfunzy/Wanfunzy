@@ -364,7 +364,6 @@ function escapeHtml(str) {
 }
 
 function parseCookies(req) {
-  if (!req || !req.headers) return {};
   const out = {};
   (req.headers.cookie || '').split(';').forEach(pair => {
     const idx = pair.indexOf('=');
@@ -423,7 +422,11 @@ function getClientIp(req) {
   return (req.socket && req.socket.remoteAddress) || 'unknown';
 }
 
-function getLang(req) { return resolveLang(parseCookies(req).lang); }
+function getLang(req) {
+  if (!req || !req.headers) return 'km';
+  const lang = parseCookies(req).lang;
+  return (lang === 'en') ? 'en' : 'km';
+}
 
 function isAwaitingKhqrPayment(order) {
   if (!order) return false;
