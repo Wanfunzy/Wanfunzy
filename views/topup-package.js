@@ -706,7 +706,7 @@ deepEl.textContent = '📱 Open Bank App →';
 deepEl.style.opacity = '1';
 deepEl.onclick = function (e) {
 e.preventDefault();
-window.open(link, '_blank');
+window.location.href = link;
 };
 } else {
 setupCopyFallback();
@@ -773,13 +773,13 @@ if (bankPicker && bankRow && BANK_BUTTONS.length > 0) {
       // [FIX] Use window.open('_blank') so iOS hands the custom URI scheme
       // to the ABA app instead of treating it as a page navigation.
       if (resolvedDeeplink) {
-        window.open(resolvedDeeplink, '_blank');
+        window.location.href = resolvedDeeplink;
         return;
       }
       // Deeplink may still be resolving — wait then open
       deeplinkRequest.then(function(link) {
         if (link) {
-          window.open(link, '_blank');
+          window.location.href = link;
         } else {
           // Clipboard fallback — paste in bank app Scan QR screen
           if (navigator.clipboard && navigator.clipboard.writeText) {
