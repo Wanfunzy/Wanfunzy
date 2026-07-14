@@ -27,7 +27,7 @@ const { renderTrackOrder }        = require('./views/track-order');
 const { renderNotFound }          = require('./views/not-found');
 const { renderTopupSelect }       = require('./views/topup-select');
 const { renderTopupPackage }      = require('./views/topup-package');
-const { resolveLang }             = require('./views/i18n');
+// resolveLang is now self-contained below (i18n.js import removed to avoid version-mismatch crashes)
 
 // ─────────────────────────────────────────────
 //  Constants
@@ -422,7 +422,11 @@ function getClientIp(req) {
   return (req.socket && req.socket.remoteAddress) || 'unknown';
 }
 
-function getLang(req) { return resolveLang(parseCookies(req).lang); }
+function getLang(req) {
+  if (!req) return 'km';
+  const lang = parseCookies(req).lang;
+  return (lang === 'en') ? 'en' : 'km';
+}
 
 function isAwaitingKhqrPayment(order) {
   if (!order) return false;
