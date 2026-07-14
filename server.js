@@ -908,7 +908,7 @@ async function handleValidatePlayer(req, res, query) {
   if (!playerId || !/^[0-9]{4,20}$/.test(playerId)) return sendJSON(res, 400, { ok: false, message: 'Player ID មិនត្រឹមត្រូវ។' });
   if (!serverId || !/^[0-9]{1,6}$/.test(serverId))  return sendJSON(res, 400, { ok: false, message: 'Server ID មិនត្រឹមត្រូវ។' });
   // Call MooGold product/validate (enabled by MooGold CS for product 15145)
-  const MLBB_MOOGOLD_PRODUCT_ID = '15145';
+  const MLBB_MOOGOLD_PRODUCT_ID = '4700134'; // variation_id for 10+1 Diamonds — correct for product/validate
   const result = await validateMLBBPlayer(playerId, serverId, MLBB_MOOGOLD_PRODUCT_ID);
   if (result.ok === true) {
     console.log('[Validate] MooGold OK — playerId:', playerId, '/ username:', result.username);
