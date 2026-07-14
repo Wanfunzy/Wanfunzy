@@ -181,7 +181,8 @@ async function fulfillWithMooGold(order) {
     quantity:     1,
     'User ID':    String(order.playerId)
   };
-  if (order.serverId) orderData['Server'] = String(order.serverId);
+  // [FIX] Always send Server field to MooGold
+  orderData['Server'] = order.serverId ? String(order.serverId) : '';
 
   console.log('[MooGold] create_order payload:', JSON.stringify({
     'product-id': order.moogoldProductId, 'User ID': order.playerId,
@@ -1696,6 +1697,18 @@ const server = http.createServer(async (req, res) => {
 //  Boot
 // ─────────────────────────────────────────────
 db.ensureDataFile();
+// [FIX] Ensure MLBB always has requiresServerId=true in DB
+try {
+  const _d = db.readDB();
+  let _changed = false;
+  (_d.games || []).forEach(function(g) {
+    if ((g.id === "mlbb" || (g.name||"").toLowerCase().includes("mobile legend")) && !g.requiresServerId) {
+      g.requiresServerId = true; _changed = true;
+      console.log("[Boot] Set requiresServerId=true for game:", g.id);
+    }
+  });
+  if (_changed) db.writeDB(_d);
+} catch(e) { console.error("[Boot] requiresServerId fix failed:", e.message); }
 db.ensureUploadsDir();
 server.listen(PORT, () => {
   console.log(`Wanfunzy server running → http://localhost:${PORT}`);
