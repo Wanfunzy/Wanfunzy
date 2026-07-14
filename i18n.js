@@ -35,9 +35,15 @@ function t(lang, key) {
   return STRINGS[l][key] || STRINGS['km'][key] || key;
 }
 
-function resolveLang(req) {
-  if (!req || !req.headers) return 'km';
-  const cookie = (req.headers.cookie || '').split(';').map(c => c.trim()).find(c => c.startsWith('lang='));
+// resolveLang accepts EITHER a req object OR a plain string ('en'/'km')
+function resolveLang(reqOrLang) {
+  // If passed a plain string (e.g. from parseCookies)
+  if (typeof reqOrLang === 'string') {
+    return (reqOrLang === 'en') ? 'en' : 'km';
+  }
+  // If passed a req object
+  if (!reqOrLang || !reqOrLang.headers) return 'km';
+  const cookie = (reqOrLang.headers.cookie || '').split(';').map(c => c.trim()).find(c => c.startsWith('lang='));
   if (cookie) { const v = cookie.split('=')[1]; if (v === 'en' || v === 'km') return v; }
   return 'km';
 }
