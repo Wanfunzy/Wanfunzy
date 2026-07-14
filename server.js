@@ -946,16 +946,25 @@ async function handleOrderDeeplink(req, res, query) {
   const a = crypto.createHash('sha256').update(token).digest();
   const b = crypto.createHash('sha256').update(order.payToken).digest();
   if (!crypto.timingSafeEqual(a, b)) return sendJSON(res, 404, { ok: false, error: 'Not found' });
-  // Build ABA deeplink directly from QR string — no Bakong API call needed.
-  // Bakong generate_deeplink_by_qr requires commercial merchant tier (errorCode 4
-  // for individual/developer accounts). ABA Pay natively supports the scheme:
-  //   abamobilebank://aba_pay?qr=<EMV_KHQR_STRING>
-  // This opens ABA app directly on the QR scan/pay screen with amount pre-filled.
-  const qrString = order.khqr && order.khqr.qr;
-  if (!qrString) { console.log('[KHQR] no QR string for order:', code); return sendJSON(res, 200, { ok: true, deeplink: null }); }
-  const abaDeeplink = 'abamobilebank://aba_pay?qr=' + encodeURIComponent(qrString);
-  console.log('[KHQR] ABA deeplink built for order:', code, '| qr bytes:', Buffer.byteLength(qrString));
-  sendJSON(res, 200, { ok: true, deeplink: abaDeeplink });
+  if (order.khqr.deeplink)       return sendJSON(res, 200, { ok: true, deeplink: order.khqr.deeplink });
+  if (order.khqr.deeplinkFailed) return sendJSON(res, 200, { ok: true, deeplink: null });
+  let dl;
+  try {
+    dl = await khqr.generateDeeplink(order.khqr.qr, { appName: KHQR_CONFIG.merchantName, appIconUrl: KHQR_CONFIG.appIconUrl, callback: KHQR_CONFIG.deeplinkCallback }, KHQR_CONFIG);
+  } catch (e) { console.log('[KHQR] deeplink threw:', e.message); return sendJSON(res, 200, { ok: true, deeplink: null }); }
+  if (dl && dl.responseCode === 0 && dl.data && typeof dl.data.shortLink === 'string') {
+    let parsed;
+    try { parsed = new URL(dl.data.shortLink); } catch (e) { parsed = null; }
+    const isSafe = parsed && parsed.protocol === 'https:'
+      && /(?:^|\.)(bakong\.gov\.kh|bakong\.page\.link|page\.link)$/i.test(parsed.hostname)
+      && dl.data.shortLink.length < 500;
+    if (isSafe) {
+      order.khqr.deeplink = dl.data.shortLink; db.writeDB(data);
+      return sendJSON(res, 200, { ok: true, deeplink: dl.data.shortLink });
+    }
+  }
+  order.khqr.deeplinkFailed = true; db.writeDB(data);
+  sendJSON(res, 200, { ok: true, deeplink: null });
 }
 
 async function handleOrderCancel(req, res) {
