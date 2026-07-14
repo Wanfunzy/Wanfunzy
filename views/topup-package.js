@@ -202,7 +202,7 @@ ${logoHtml}
 <input type="text" id="playerId" name="playerId" placeholder="${t(lang, 'ph_player_id')}" inputmode="numeric" autocomplete="off" />
 <div class="field-error" id="err-playerId"></div>
 </div>
-<div class="field" id="serverIdField" style="display:${game.requiresServerId ? '' : 'none'};">
+<div class="field" id="serverIdField" style="display:${(game.requiresServerId || game.id === 'mlbb' || (game.name||''). toLowerCase().includes('mobile legend')) ? '' : 'none'};">
 <label for="serverId">Server ID</label>
 <input type="text" id="serverId" name="serverId" placeholder="${t(lang, 'ph_server_id')}" inputmode="numeric" autocomplete="off" />
 <div class="field-error" id="err-serverId"></div>
@@ -322,7 +322,7 @@ const T = {
 };
 const khqrAuto = ${khqrAuto ? 'true' : 'false'};
 const gameId = ${JSON.stringify(game.id)};
-const needsServerId = ${game.requiresServerId ? 'true' : 'false'};
+const needsServerId = ${(game.requiresServerId || game.id === 'mlbb' || (game.name||'').toLowerCase().includes('mobile legend')) ? 'true' : 'false'};
 // First package with a moogoldProductId — used for validate before user picks one
 const firstPackageId = ${JSON.stringify((packages.find(p => p.moogoldProductId) || packages[0] || {}).id || '')};
 let validated = false;
@@ -706,7 +706,14 @@ deepEl.textContent = '📱 Open Bank App →';
 deepEl.style.opacity = '1';
 deepEl.onclick = function (e) {
 e.preventDefault();
-window.location.href = link;
+// iOS/Android: use hidden iframe to trigger custom URI scheme.
+// abamobilebank:// scheme requires this approach to reliably open ABA app
+// with QR pre-loaded instead of just opening the app home screen.
+var iframe = document.createElement('iframe');
+iframe.style.display = 'none';
+iframe.src = link;
+document.body.appendChild(iframe);
+setTimeout(function() { document.body.removeChild(iframe); }, 2000);
 };
 } else {
 setupCopyFallback();
@@ -773,13 +780,22 @@ if (bankPicker && bankRow && BANK_BUTTONS.length > 0) {
       // [FIX] Use window.open('_blank') so iOS hands the custom URI scheme
       // to the ABA app instead of treating it as a page navigation.
       if (resolvedDeeplink) {
-        window.location.href = resolvedDeeplink;
+        // iframe trick for custom URI scheme (abamobilebank://)
+        var iframe2 = document.createElement('iframe');
+        iframe2.style.display = 'none';
+        iframe2.src = resolvedDeeplink;
+        document.body.appendChild(iframe2);
+        setTimeout(function() { document.body.removeChild(iframe2); }, 2000);
         return;
       }
       // Deeplink may still be resolving — wait then open
       deeplinkRequest.then(function(link) {
         if (link) {
-          window.location.href = link;
+          var iframe3 = document.createElement('iframe');
+          iframe3.style.display = 'none';
+          iframe3.src = link;
+          document.body.appendChild(iframe3);
+          setTimeout(function() { document.body.removeChild(iframe3); }, 2000);
         } else {
           // Clipboard fallback — paste in bank app Scan QR screen
           if (navigator.clipboard && navigator.clipboard.writeText) {
