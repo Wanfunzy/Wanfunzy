@@ -916,8 +916,10 @@ async function handleValidatePlayer(req, res, query) {
     return sendJSON(res, 200, { ok: true, username: result.username, message: result.message || '' });
   }
   if (result.ok === false) {
-    console.log('[Validate] MooGold REJECTED — playerId:', playerId, '/', result.message);
-    return sendJSON(res, 200, { ok: false, message: result.message || 'Player ID ឬ Zone ID មិនត្រឹមត្រូវ។' });
+    // [FIX] MooGold validate rejects valid Zone IDs (e.g. 10050) for some
+    // variation_ids even though create_order succeeds. Don't block — fall
+    // through to hybrid self-confirm. Order #43682939 confirmed 10050 works.
+    console.log('[Validate] MooGold rejected (hybrid fallback) — playerId:', playerId, '/', result.message);
   }
   // ok === null — validate unavailable, fall back to manual confirm
   console.log('[Validate] skipped (fallback) — playerId:', playerId, '/ serverId:', serverId);
