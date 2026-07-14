@@ -947,7 +947,12 @@ async function handleOrderDeeplink(req, res, query) {
   const b = crypto.createHash('sha256').update(order.payToken).digest();
   if (!crypto.timingSafeEqual(a, b)) return sendJSON(res, 404, { ok: false, error: 'Not found' });
   if (order.khqr.deeplink)       return sendJSON(res, 200, { ok: true, deeplink: order.khqr.deeplink });
-  if (order.khqr.deeplinkFailed) return sendJSON(res, 200, { ok: true, deeplink: null });
+  // [FIX-1] Do NOT cache deeplinkFailed permanently — Bakong may have been
+  // unverified before and is now verified. Clear the flag and retry every time.
+  if (order.khqr.deeplinkFailed) {
+    delete order.khqr.deeplinkFailed;
+    db.writeDB(data);
+  }
   let dl;
   try {
     dl = await khqr.generateDeeplink(order.khqr.qr, { appName: KHQR_CONFIG.merchantName, appIconUrl: KHQR_CONFIG.appIconUrl, callback: KHQR_CONFIG.deeplinkCallback }, KHQR_CONFIG);
@@ -955,13 +960,19 @@ async function handleOrderDeeplink(req, res, query) {
   if (dl && dl.responseCode === 0 && dl.data && typeof dl.data.shortLink === 'string') {
     let parsed;
     try { parsed = new URL(dl.data.shortLink); } catch (e) { parsed = null; }
+    // [FIX-2] Expanded domain whitelist to cover all Bakong deeplink domains
+    // including bakong.com.kh subdomains used by verified merchant accounts.
     const isSafe = parsed && parsed.protocol === 'https:'
-      && /(?:^|\.)(bakong\.gov\.kh|bakong\.page\.link|page\.link)$/i.test(parsed.hostname)
+      && /(?:^|\.)(bakong\.gov\.kh|bakong\.com\.kh|bakong\.page\.link|page\.link)$/i.test(parsed.hostname)
       && dl.data.shortLink.length < 500;
     if (isSafe) {
       order.khqr.deeplink = dl.data.shortLink; db.writeDB(data);
       return sendJSON(res, 200, { ok: true, deeplink: dl.data.shortLink });
     }
+    // Log unexpected domain so we can add it to whitelist if needed
+    console.log('[KHQR] deeplink domain not whitelisted:', parsed && parsed.hostname, dl.data.shortLink.slice(0, 80));
+  } else {
+    console.log('[KHQR] deeplink API response:', JSON.stringify(dl).slice(0, 200));
   }
   order.khqr.deeplinkFailed = true; db.writeDB(data);
   sendJSON(res, 200, { ok: true, deeplink: null });
