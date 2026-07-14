@@ -29,10 +29,7 @@ const STRINGS = {
 
   btn_validate:    { en: 'Verify Account', km: 'ពិនិត្យគណនី' },
   btn_validated:   { en: '✓ Verified',     km: '✓ បានពិនិត្យ' },
-  hint_validate_first: {
-    en: 'Before paying, please check "I agree to the TERMS AND CONDITIONS" below to enable the Pay button',
-    km: 'មុនពេលបង់លុយ សូមចុចធីក "I agree TERMS AND CONDITIONS" ខាងក្រោមជាមុនសិន ទើបប៊ូតុង Pay អាចប្រើបាន'
-  },
+  hint_validate_first: { en: '', km: '' },
   hint_pick_package:   { en: 'Tap a package to select it', km: 'ចុចលើកញ្ចប់ណាមួយ ដើម្បីជ្រើសរើស' },
 
   band_promo:    { en: 'Special Offers', km: 'ការបញ្ចុះតម្លៃ' },
@@ -44,8 +41,8 @@ const STRINGS = {
   ph_note:       { en: 'Extra info...',   km: 'ព័ត៌មានបន្ថែម...' },
 
   agree_terms: {
-    en: 'I agree TERMS AND CONDITIONS',
-    km: 'I agree TERMS AND CONDITIONS'
+    en: 'I agree',
+    km: 'I agree'
   },
   err_agree_terms: {
     en: 'Please agree to the Terms and Conditions first',
