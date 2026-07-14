@@ -1,0 +1,11 @@
+{
+  "name": "wanfunzy",
+  "version": "1.0.0",
+  "description": "Wanfunzy — Game Top-up Store",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {}
+}
