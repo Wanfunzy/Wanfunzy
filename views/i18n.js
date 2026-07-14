@@ -1,221 +1,97 @@
-// khqr.js — KHQR (Bakong) payment helpers, zero external dependencies.
-//
-// AUDIT FIXES (v2):
-//   [BUG-1] generateKhqr was appending a CSS <style> block directly onto the
-//           QR data string ("qr: qr + forcedCssStyle"). On the first package
-//           selection this sometimes survived because the QR renderer ignored
-//           trailing garbage, but on every subsequent package change the
-//           accumulated / re-injected CSS corrupted the EMV payload and made
-//           the code un-scannable.  FIX: QR string is now returned pure
-//           (only EMV TLV + CRC16).  Aspect-ratio styling belongs in CSS/HTML.
-//   [BUG-2] safeSliceByByte had an infinite-loop risk when the input was
-//           already within budget — the inner while-loop mutated the wrong
-//           variable (`str` instead of `res`).  FIX: rewritten cleanly.
-//   [SEC-1] billNumber sanitisation now also strips characters outside the
-//           ANS character set allowed by EMV field 62-01 (alphanumeric only).
-//           Already present but made explicit.
-//   [STYLE] Removed the dead `forcedCssStyle` constant entirely so no future
-//           developer accidentally re-enables it.
+'use strict';
+// views/i18n.js — central bilingual dictionary. Every user-facing string
+// lives here keyed by a short id. Views call t(lang, 'key') to render the
+// right language.
 
-const crypto = require('crypto');
-const https = require('https');
-const http = require('http');
+const STRINGS = {
+  nav_change_game: { en: '← Change Game', km: '← ប្តូរ Game' },
+  nav_contact:     { en: 'Contact',        km: 'Contact' },
+  nav_home:        { en: 'Home',           km: 'Home' },
+  nav_topup:       { en: 'Top Up',         km: 'Top Up' },
+  nav_track:       { en: 'Track Order',    km: 'តាមដាន Order' },
+  nav_terms:       { en: 'Terms',          km: 'លក្ខខណ្ឌ' },
+  menu_title:      { en: 'Menu',           km: 'ម៉ឺនុយ' },
+  lang_label:      { en: 'EN',             km: 'ខ្មែរ' },
 
-// ---------- EMV TLV helpers ----------
+  landing_heading: { en: 'Top Up', km: 'Top Up' },
 
-function tlv(tag, value) {
-  const v = String(value);
-  const byteLength = Buffer.byteLength(v, 'utf8');
-  if (byteLength > 99) throw new Error(`KHQR field ${tag} too long (${byteLength} bytes)`);
-  return tag + String(byteLength).padStart(2, '0') + v;
+  topping_up_for:  { en: 'Topping up for', km: 'កំពុងបញ្ចូលសម្រាប់' },
+  step1_title:     { en: '', km: '' },
+  step2_title:     { en: '', km: '' },
+  step3_title:     { en: 'Contact & Payment', km: 'ទំនាក់ទំនង និងទូទាត់' },
+
+  label_player_id: { en: 'Player ID',          km: 'Player ID' },
+  label_server_id: { en: 'Zone ID (Server)',   km: 'Zone ID (Server)' },
+  ph_player_id:    { en: 'e.g. 123456789',     km: 'ឧ. 123456789' },
+  ph_server_id:    { en: 'e.g. 2001',          km: 'ឧ. 2001' },
+  hint_player_id:  { en: 'MLBB → Profile → ID number below your username', km: 'MLBB → Profile → លេខ ID ក្រោម username' },
+  hint_server_id:  { en: 'MLBB → Profile → number in brackets e.g. (2001)', km: 'MLBB → Profile → លេខក្នុងវង់ក្រចក ឧ. (2001)' },
+
+  btn_validate:    { en: 'Verify Account', km: 'ពិនិត្យគណនី' },
+  btn_validated:   { en: '✓ Verified',     km: '✓ បានពិនិត្យ' },
+  hint_validate_first: {
+    en: 'Before paying, please check "I agree to the TERMS AND CONDITIONS" below to enable the Pay button',
+    km: 'មុនពេលបង់លុយ សូមចុចធីក "I agree TERMS AND CONDITIONS" ខាងក្រោមជាមុនសិន ទើបប៊ូតុង Pay អាចប្រើបាន'
+  },
+  hint_pick_package:   { en: 'Tap a package to select it', km: 'ចុចលើកញ្ចប់ណាមួយ ដើម្បីជ្រើសរើស' },
+
+  band_promo:    { en: 'Special Offers', km: 'ការបញ្ចុះតម្លៃ' },
+  band_packages: { en: 'Packages',       km: 'កញ្ចប់' },
+
+  label_contact: { en: 'Phone or Telegram (so we can reach you)', km: 'លេខទូរស័ព្ទ ឬ Telegram (សម្រាប់ទាក់ទងវិញ)' },
+  ph_contact:    { en: 'e.g. 0961234567 or @username', km: 'ឧ. 0961234567 ឬ @username' },
+  label_note:    { en: 'Note (optional)', km: 'កំណត់ចំណាំ (មិនទាមទារ)' },
+  ph_note:       { en: 'Extra info...',   km: 'ព័ត៌មានបន្ថែម...' },
+
+  agree_terms: {
+    en: 'I agree TERMS AND CONDITIONS',
+    km: 'I agree TERMS AND CONDITIONS'
+  },
+  err_agree_terms: {
+    en: 'Please agree to the Terms and Conditions first',
+    km: 'សូមចុចយល់ព្រម Terms and Conditions ជាមុនសិន'
+  },
+
+  total_label: { en: 'Total:',           km: 'សរុប៖' },
+  btn_buy:     { en: 'Buy Now',          km: 'ទិញឥឡូវនេះ' },
+  btn_buying:  { en: 'Placing order...', km: 'កំពុងដាក់ Order...' },
+
+  khqr_auto_title:     { en: 'Scan KHQR to pay', km: 'ស្កេន KHQR ដើម្បីទូទាត់' },
+  khqr_auto_waiting:   { en: 'Waiting for your payment…', km: 'កំពុងរង់ចាំការទូទាត់របស់អ្នក…' },
+  khqr_auto_paid:      { en: '✓ Payment received! Redirecting…', km: '✓ ទទួលបានការទូទាត់ហើយ! កំពុងបន្ត…' },
+  khqr_auto_time_left: { en: 'Time left', km: 'ពេលនៅសល់' },
+  khqr_merchant_name:  { en: 'Wanfunzy Store', km: 'ហាង Wanfunzy' },
+  currency_unit:       { en: 'USD', km: 'USD' },
+
+  err_player_id: { en: 'Player ID must be numbers (4-20 digits)', km: 'Player ID ត្រូវតែជាលេខ (4-20 ខ្ទង់)' },
+  err_server_id: { en: 'Invalid Server ID', km: 'Server ID មិនត្រឹមត្រូវ' },
+  err_contact:   { en: 'Please enter a phone number or Telegram', km: 'សូមបញ្ចូលលេខទូរស័ព្ទ ឬ Telegram' },
+  err_generic:   { en: 'Something went wrong', km: 'មានបញ្ហាកើតឡើង' },
+  err_connect:   { en: 'Could not connect to the server. Please try again.', km: 'មិនអាចភ្ជាប់ទៅ server បានទេ។ សូមព្យាយាមម្តងទៀត។' },
+
+  footer_disclaimer: { en: 'is not officially affiliated with any game publisher.', km: 'មិនមានទំនាក់ទំនងផ្លូវការជាមួយក្រុមហ៊ុនបង្កើត game ណាមួយឡើយ។' },
+  footer_contact_tg: { en: 'Contact us on Telegram →', km: 'ទាក់ទងតាម Telegram →' }
+};
+
+function t(lang, key) {
+  const entry = STRINGS[String(key).trim()];
+  if (!entry) return key;
+  const l = (lang === 'km') ? 'km' : 'en';
+  return entry[l] || entry.en || key;
 }
 
-function crc16(str) {
-  let crc = 0xffff;
-  const buf = Buffer.from(str, 'utf8');
-  for (let i = 0; i < buf.length; i++) {
-    crc ^= buf[i] << 8;
-    for (let b = 0; b < 8; b++) {
-      crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
-    }
+function resolveLang(input) {
+  if (!input) return 'en';
+  if (typeof input === 'string') {
+    if (input === 'km') return 'km';
+    if (/(?:^|;\s*)lang=km(?:;|$)/.test(input)) return 'km';
+    return 'en';
   }
-  return crc.toString(16).toUpperCase().padStart(4, '0');
-}
-
-// [BUG-2 FIX] Rewritten — was mutating `str` but checking `res` length.
-function safeSliceByByte(str, maxBytes) {
-  if (Buffer.byteLength(str, 'utf8') <= maxBytes) return str;
-  // Walk codepoints until we exceed the byte budget.
-  let byteCount = 0;
-  let i = 0;
-  for (const char of str) {
-    const charBytes = Buffer.byteLength(char, 'utf8');
-    if (byteCount + charBytes > maxBytes) break;
-    byteCount += charBytes;
-    i += char.length; // handles surrogate pairs
+  if (typeof input === 'object' && input.headers) {
+    const cookie = input.headers.cookie || '';
+    if (/(?:^|;\s*)lang=km(?:;|$)/.test(cookie)) return 'km';
   }
-  return str.slice(0, i);
+  return 'en';
 }
 
-const CURRENCY_CODES = { USD: '840', KHR: '116' };
-
-// ---------- QR generation ----------
-
-function generateKhqr(opts) {
-  const accountId = String(opts.accountId || '').trim();
-  const merchantName = safeSliceByByte(String(opts.merchantName || 'Wanfunzy').trim(), 25);
-  const merchantCity = safeSliceByByte(String(opts.merchantCity || 'Phnom Penh').trim(), 15);
-  const currency = (opts.currency || 'USD').toUpperCase();
-
-  // Bill number: alphanumeric only, 12 chars, left-padded with zeros.
-  const rawBill = String(opts.billNumber || '').trim().replace(/[^a-zA-Z0-9]/g, '');
-  if (!rawBill) throw new Error('Bill number is required for dynamic KHQR');
-  const billNumber = rawBill.slice(0, 12).padStart(12, '0');
-
-  if (!accountId || !accountId.includes('@')) throw new Error('Invalid Bakong account ID');
-  if (!CURRENCY_CODES[currency]) throw new Error('Unsupported currency: ' + currency);
-
-  // Amount — always 2 decimal places for USD, integer string for KHR.
-  const parsedAmount = Number(opts.amount);
-  if (isNaN(parsedAmount) || parsedAmount <= 0) throw new Error('Invalid amount');
-  const amountStr = currency === 'USD' ? parsedAmount.toFixed(2) : String(Math.round(parsedAmount));
-
-  // Timestamp floored to the minute so the QR string (and its MD5) is stable
-  // within the same minute — avoids unnecessary re-renders on hot-reload.
-  const expireMinutes = Number(opts.expireMinutes) > 0 ? Number(opts.expireMinutes) : 10;
-  const createdAt = Math.floor(Date.now() / 60000) * 60000;
-  const expiresAt = createdAt + expireMinutes * 60 * 1000;
-
-  // Build EMV TLV string.
-  let qr = '';
-  qr += tlv('00', '01');
-  qr += tlv('01', '12');
-  qr += tlv('29', tlv('00', accountId));
-  qr += tlv('52', '5999');
-  qr += tlv('53', CURRENCY_CODES[currency]);
-  qr += tlv('54', amountStr);
-  qr += tlv('58', 'KH');
-  qr += tlv('59', merchantName);
-  qr += tlv('60', merchantCity);
-  qr += tlv('62', tlv('01', billNumber));
-  qr += tlv('99', tlv('00', String(createdAt)) + tlv('01', String(expiresAt)));
-  qr += '6304';
-  qr += crc16(qr);
-
-  const md5 = crypto.createHash('md5').update(qr).digest('hex');
-
-  // [BUG-1 FIX] Return the pure EMV QR string only.
-  // Do NOT append CSS, HTML, or any other content here — it corrupts the
-  // payload and breaks scanning on every package change after the first.
-  // Aspect-ratio / sizing CSS belongs in your stylesheet or <img> class.
-  return {
-    qr,        // pure EMV TLV string — safe to pass to any QR encoder
-    md5,
-    expiresAt,
-    amount: amountStr,
-    currency
-  };
-}
-
-// ---------- Transaction check ----------
-
-function checkTransactionByMd5(md5, config) {
-  return new Promise((resolve, reject) => {
-    let base;
-    try {
-      base = new URL(config.apiBase);
-    } catch (e) {
-      return reject(new Error('Invalid BAKONG_API_BASE URL'));
-    }
-    const payload = JSON.stringify({ md5: String(md5) });
-    const lib = base.protocol === 'http:' ? http : https;
-    const req = lib.request(
-      {
-        hostname: base.hostname,
-        port: base.port || (base.protocol === 'http:' ? 80 : 443),
-        path: base.pathname.replace(/\/$/, '') + '/v1/check_transaction_by_md5',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(payload),
-          Authorization: 'Bearer ' + config.token
-        },
-        timeout: 10000
-      },
-      (res) => {
-        let body = '';
-        res.on('data', (chunk) => {
-          body += chunk;
-          if (body.length > 64 * 1024) req.destroy(new Error('Response too large'));
-        });
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(body));
-          } catch (e) {
-            reject(new Error('Bad JSON from payment API (HTTP ' + res.statusCode + ')'));
-          }
-        });
-      }
-    );
-    req.on('timeout', () => req.destroy(new Error('Payment API timeout')));
-    req.on('error', reject);
-    req.write(payload);
-    req.end();
-  });
-}
-
-// ---------- Deeplink generation ----------
-
-function generateDeeplink(qrString, appInfo, config) {
-  return new Promise((resolve, reject) => {
-    let base;
-    try {
-      base = new URL(config.apiBase);
-    } catch (e) {
-      return reject(new Error('Invalid BAKONG_API_BASE URL'));
-    }
-    const payload = JSON.stringify({
-      qr: String(qrString),
-      sourceInfo: {
-        appIconUrl: appInfo.appIconUrl || '',
-        appName: appInfo.appName || 'Wanfunzy',
-        appDeepLinkCallback: appInfo.callback || ''
-      }
-    });
-    const lib = base.protocol === 'http:' ? http : https;
-    const req = lib.request(
-      {
-        hostname: base.hostname,
-        port: base.port || (base.protocol === 'http:' ? 80 : 443),
-        path: base.pathname.replace(/\/$/, '') + '/v1/generate_deeplink_by_qr',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(payload),
-          Authorization: 'Bearer ' + config.token
-        },
-        timeout: 10000
-      },
-      (res) => {
-        let body = '';
-        res.on('data', (chunk) => {
-          body += chunk;
-          if (body.length > 64 * 1024) req.destroy(new Error('Response too large'));
-        });
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(body));
-          } catch (e) {
-            reject(new Error('Bad JSON from deeplink API (HTTP ' + res.statusCode + ')'));
-          }
-        });
-      }
-    );
-    req.on('timeout', () => req.destroy(new Error('Deeplink API timeout')));
-    req.on('error', reject);
-    req.write(payload);
-    req.end();
-  });
-}
-
-module.exports = { generateKhqr, checkTransactionByMd5, generateDeeplink, crc16 };
+module.exports = { t, resolveLang, STRINGS };
