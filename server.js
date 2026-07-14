@@ -186,7 +186,7 @@ async function fulfillWithMooGold(order) {
 
   console.log('[MooGold] create_order payload:', JSON.stringify({
     'product-id': order.moogoldProductId, 'User ID': order.playerId,
-    'Server': order.serverId || '(none)'
+    'Zone ID': order.serverId || '(none)'
   }));
 
   // [FIX] err 109 "Invalid Signature" — MooGold computes the HMAC over the
