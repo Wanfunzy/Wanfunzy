@@ -898,7 +898,14 @@ async function handleValidatePlayer(req, res, query) {
     return sendJSON(res, 200, { ok: true, username: result.username, message: result.message || '' });
   }
   if (result.ok === false) {
-    console.log('[Validate] MooGold rejected (hybrid fallback) — playerId:', playerId, '/', result.message);
+    // [FIX per Saem's request] MooGold explicitly confirmed this Player ID
+    // + Zone ID combination is WRONG — block the purchase instead of
+    // silently falling through to hybrid mode. This prevents customers
+    // topping up an invalid/non-existent account. Hybrid pass is only
+    // used below when validate itself is unavailable (result.ok === null),
+    // e.g. worker down or MooGold endpoint not authorized for this product.
+    console.log('[Validate] MooGold REJECTED — playerId:', playerId, '/', result.message);
+    return sendJSON(res, 200, { ok: false, message: result.message || 'Player ID ឬ Server ID មិនត្រឹមត្រូវ។ សូមពិនិត្យម្តងទៀត។' });
   }
   console.log('[Validate] skipped (fallback) — playerId:', playerId, '/ serverId:', serverId);
   return sendJSON(res, 200, { ok: true, username: '', skipped: true, message: 'សូមបញ្ជាក់ Player ID + Zone ID ខ្លួនឯង ក្នុង Game មុន' });
