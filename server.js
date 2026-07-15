@@ -27,7 +27,6 @@ const { renderTrackOrder }        = require('./views/track-order');
 const { renderNotFound }          = require('./views/not-found');
 const { renderTopupSelect }       = require('./views/topup-select');
 const { renderTopupPackage }      = require('./views/topup-package');
-// resolveLang is now self-contained below (i18n.js import removed to avoid version-mismatch crashes)
 
 // ─────────────────────────────────────────────
 //  Constants
@@ -61,14 +60,11 @@ function khqrAutoEnabled() {
   return !!(KHQR_CONFIG.token && KHQR_CONFIG.accountId);
 }
 
-const khqrCheckThrottle      = new Map(); // orderCode -> lastCheckMs
+const khqrCheckThrottle      = new Map();
 const KHQR_MIN_CHECK_GAP_MS  = 4000;
 const KHQR_POLL_INTERVAL_MS  = 45 * 1000;
 const KHQR_POLL_ORDER_GAP_MS = 800;
 
-// ─────────────────────────────────────────────
-//  Startup diagnostics
-// ─────────────────────────────────────────────
 console.log('[KHQR] auto-verify enabled:', khqrAutoEnabled());
 console.log('[KHQR] accountId:', KHQR_CONFIG.accountId || '(not set)');
 console.log('[KHQR] apiBase:', KHQR_CONFIG.apiBase);
@@ -133,14 +129,6 @@ function moogoldRequest(reqPath, payload, signingPayload, _retried) {
         try { parsed = JSON.parse(data); }
         catch (e) { return reject(new Error('Bad JSON from MooGold')); }
 
-        // [FIX] err_code 426 = "Timestamp is incorrect". moogoldAuth()
-        // always mints a brand-new timestamp per call, so this is almost
-        // always a transient issue (slow network, cold container start,
-        // brief clock skew) rather than a real bug — the request just
-        // arrived at MooGold slightly outside their acceptance window.
-        // Retry ONCE, automatically, with a freshly generated timestamp
-        // + signature. If it still fails after the retry, surface the
-        // error normally so it doesn't loop forever.
         const errCode = parsed && (parsed.err_code || (parsed.data && parsed.data.err_code));
         if (!_retried && (errCode === '426' || errCode === 426)) {
           console.log('[MooGold] err 426 (Timestamp is incorrect) — retrying once with a fresh timestamp for', reqPath);
@@ -171,29 +159,32 @@ async function fulfillWithMooGold(order) {
   } catch (e) { /* non-fatal */ }
 
   if (gameRequiresServer && !order.serverId) {
-    console.log('[MooGold] BLOCKED — missing Server/Zone ID for', order.gameId, '| order:', order.code);
-    return { ok: false, error: `Server/Zone ID ត្រូវតែបញ្ចូលសម្រាប់ game នេះ (${order.gameName || order.gameId})` };
+    console.log('[MooGold] BLOCKED — missing Zone ID for', order.gameId, '| order:', order.code);
+    return { ok: false, error: `Zone ID ត្រូវតែបញ្ចូលសម្រាប់ game នេះ (${order.gameName || order.gameId})` };
   }
 
+  // [FIX] MooGold's API requires the key "Zone ID" (with a space) for the
+  // server/zone value, NOT "Server". "User ID" (with space) is correct
+  // as-is and works fine. Sending "Server" caused MooGold to silently
+  // ignore the value entirely — account_details echoed back
+  // "Server ID": "" even though our payload's Server field was populated
+  // correctly — and the order was later refunded for incorrect details,
+  // despite the User ID + Zone ID pair being 100% correct (verified
+  // against the customer's own in-game profile screenshot: 592784466
+  // (10050), Cambodia/Phnom Penh).
   const orderData = {
     category:     1,
     'product-id': Number(order.moogoldProductId),
     quantity:     1,
     'User ID':    String(order.playerId)
   };
-  // [FIX] Always send Server field — MLBB requires Zone ID even if empty
-  orderData['Server'] = String(order.serverId || '');
+  if (order.serverId) orderData['Zone ID'] = String(order.serverId);
 
   console.log('[MooGold] create_order payload:', JSON.stringify({
     'product-id': order.moogoldProductId, 'User ID': order.playerId,
     'Zone ID': order.serverId || '(none)'
   }));
 
-  // [FIX] err 109 "Invalid Signature" — MooGold computes the HMAC over the
-  // full request body that it receives, including partnerOrderId. Signing a
-  // stripped-down object (without partnerOrderId) produces a different JSON
-  // string → different hash → signature mismatch. Sign the exact payload
-  // that will be sent.
   const payload        = { path: 'order/create_order', data: orderData, partnerOrderId: order.code };
   const signingPayload = payload; // sign exactly what we send
 
@@ -213,7 +204,7 @@ async function fulfillWithMooGold(order) {
     };
     if (r && (r.err_code === '420' || r.err_code === 420)) return { ok: true, status: 'duplicate-ignored' };
     if (r && r.status === 'refunded')
-      return { ok: false, error: 'MooGold refunded — Player ID ឬ Server ID មិនត្រឹមត្រូវ', refunded: true, moogoldOrderId: r.order_id || null };
+      return { ok: false, error: 'MooGold refunded — Player ID ឬ Zone ID មិនត្រឹមត្រូវ', refunded: true, moogoldOrderId: r.order_id || null };
     if (r && (r.err_code === '111' || r.err_code === 111)) return { ok: false, error: 'MooGold: Insufficient Balance — សូមបញ្ចូលទឹកប្រាក់ MooGold!' };
     if (r && (r.err_code === '422' || r.err_code === 422)) return { ok: false, error: 'MooGold: Product ID មិនត្រឹមត្រូវ ឬ មិនទាន់ authorized' };
     if (r && (r.err_code === '114' || r.err_code === 114)) return { ok: false, error: 'MooGold: Product Out of Stock!' };
@@ -224,9 +215,10 @@ async function fulfillWithMooGold(order) {
 
 async function validatePlayerWithMooGold(productId, playerId, serverId) {
   if (!moogoldEnabled() || !productId) return { ok: null };
+  // [FIX] Use "Zone ID" key here too, matching create_order.
   const payload = {
     path: 'product/validate',
-    data: { 'product-id': String(productId), 'User ID': String(playerId), ...(serverId ? { 'Server': String(serverId) } : {}) }
+    data: { 'product-id': String(productId), 'User ID': String(playerId), ...(serverId ? { 'Zone ID': String(serverId) } : {}) }
   };
   try {
     const result = await moogoldRequest('product/validate', payload, payload);
@@ -245,12 +237,11 @@ async function validatePlayerWithMooGold(productId, playerId, serverId) {
       console.log('[MooGold] validate endpoint not authorized — hybrid mode');
       return { ok: null, skipped: true, message: msg };
     }
-    return { ok: false, message: msg || 'Player ID ឬ Server ID មិនត្រឹមត្រូវ' };
+    return { ok: false, message: msg || 'Player ID ឬ Zone ID មិនត្រឹមត្រូវ' };
   } catch (e) { console.error('[MooGold] validate error:', e.message); return { ok: null, error: e.message }; }
 }
 
 async function validateMLBBPlayer(playerId, serverId, moogoldProductId) {
-  // Tier 1: Cloudflare Worker
   const workerUrl = process.env.MLBB_WORKER_URL;
   if (workerUrl) {
     try {
@@ -270,7 +261,7 @@ async function validateMLBBPlayer(playerId, serverId, moogoldProductId) {
               try {
                 const json = JSON.parse(data);
                 if (json.ok === true && json.username) resolve({ ok: true, username: json.username });
-                else if (json.ok === false)            resolve({ ok: false, message: json.message || 'Player ID ឬ Server ID មិនត្រឹមត្រូវ' });
+                else if (json.ok === false)            resolve({ ok: false, message: json.message || 'Player ID ឬ Zone ID មិនត្រឹមត្រូវ' });
                 else                                   resolve({ ok: null, error: 'Worker response unclear' });
               } catch (e) { resolve({ ok: null, error: 'Parse error' }); }
             });
@@ -286,7 +277,6 @@ async function validateMLBBPlayer(playerId, serverId, moogoldProductId) {
     } catch (e) { console.log('[MLBB] Worker threw:', e.message, '— trying MooGold validate'); }
   }
 
-  // Tier 2: MooGold product/validate
   if (moogoldProductId && moogoldEnabled()) {
     const mgResult = await validatePlayerWithMooGold(moogoldProductId, playerId, serverId);
     if (mgResult.ok === true && mgResult.username) {
@@ -300,7 +290,6 @@ async function validateMLBBPlayer(playerId, serverId, moogoldProductId) {
     console.log('[MLBB] MooGold validate not authorized — hybrid mode');
   }
 
-  // Tier 3: Hybrid pass
   console.log('[MLBB] All validate paths unavailable — hybrid pass for', playerId);
   return { ok: null, error: 'all paths unavailable' };
 }
@@ -354,7 +343,6 @@ function notifyTelegram(text) {
   req.on('error', err => console.error('Telegram notify failed:', err.message));
   req.write(payload); req.end();
 }
-
 
 // ═════════════════════════════════════════════
 //  Utility helpers
@@ -452,7 +440,6 @@ function verifyTransaction(tx, order) {
   return amountOk && currencyOk && accountOk;
 }
 
-
 // ═════════════════════════════════════════════
 //  Session & auth
 // ═════════════════════════════════════════════
@@ -490,7 +477,6 @@ function requireCsrf(req, res, session) {
   return true;
 }
 
-// ─── Rate limiting ────────────────────────────
 const rateLimitBuckets = new Map();
 function isRateLimited(ip, bucket = 'login', maxAttempts = 8, windowMs = 60 * 1000) {
   const key   = `${bucket}:${ip}`;
@@ -506,7 +492,6 @@ setInterval(() => {
   for (const [k, e] of rateLimitBuckets) if (now - e.windowStart > 3600 * 1000) rateLimitBuckets.delete(k);
 }, 10 * 60 * 1000);
 
-// ─── Account lockout ──────────────────────────
 const loginFailures = new Map();
 function isLockedOut(ip) {
   const entry = loginFailures.get(ip);
@@ -526,7 +511,6 @@ setInterval(() => {
   for (const [ip, e] of loginFailures) if (e.lockedUntil && now > e.lockedUntil) loginFailures.delete(ip);
 }, 10 * 60 * 1000);
 
-// ─── Session cleanup ──────────────────────────
 setInterval(() => {
   try {
     const data = db.readDB(); const now = Date.now(); let removed = 0;
@@ -535,7 +519,6 @@ setInterval(() => {
     if (removed > 0) db.writeDB(data);
   } catch (e) { /* best-effort */ }
 }, 3600 * 1000);
-
 
 // ═════════════════════════════════════════════
 //  Cloudflare Turnstile (optional CAPTCHA)
@@ -565,7 +548,6 @@ async function verifyTurnstile(token, ip) {
     return !!result.success;
   } catch (e) { return false; }
 }
-
 
 // ═════════════════════════════════════════════
 //  Static file serving
@@ -696,7 +678,6 @@ setInterval(
   KHQR_POLL_INTERVAL_MS
 );
 
-
 // ═════════════════════════════════════════════
 //  Route handlers — public
 // ═════════════════════════════════════════════
@@ -794,9 +775,6 @@ async function handleDebugIp(req, res) {
   req2.end();
 }
 
-// ─────────────────────────────────────────────
-//  Order creation — legacy (handleCreateOrder)
-// ─────────────────────────────────────────────
 async function handleCreateOrder(req, res) {
   const ip = getClientIp(req);
   if (isRateLimited(ip, 'order', 10, 60 * 1000)) return sendJSON(res, 429, { ok: false, error: 'សកម្មភាពញឹកញាប់ពេក។ សូមរង់ចាំមួយភ្លែត។' });
@@ -833,9 +811,6 @@ async function handleCreateOrder(req, res) {
   sendJSON(res, 201, { ok: true, order: { code: order.code, id: order.id } });
 }
 
-// ─────────────────────────────────────────────
-//  Order creation — topup flow
-// ─────────────────────────────────────────────
 async function handleCreateTopupOrder(req, res) {
   const ip = getClientIp(req);
   if (isRateLimited(ip, 'order', 10, 60 * 1000)) return sendJSON(res, 429, { ok: false, errors: ['សកម្មភាពញឹកញាប់ពេក។ សូមរង់ចាំមួយភ្លែត។'] });
@@ -908,20 +883,15 @@ async function handleValidatePlayer(req, res, query) {
   const serverId = (query.serverId || '').trim();
   if (!playerId || !/^[0-9]{4,20}$/.test(playerId)) return sendJSON(res, 400, { ok: false, message: 'Player ID មិនត្រឹមត្រូវ។' });
   if (!serverId || !/^[0-9]{1,6}$/.test(serverId))  return sendJSON(res, 400, { ok: false, message: 'Server ID មិនត្រឹមត្រូវ។' });
-  // Call MooGold product/validate (enabled by MooGold CS for product 15145)
-  const MLBB_MOOGOLD_PRODUCT_ID = '15145';
+  const MLBB_MOOGOLD_PRODUCT_ID = '4700134';
   const result = await validateMLBBPlayer(playerId, serverId, MLBB_MOOGOLD_PRODUCT_ID);
   if (result.ok === true) {
     console.log('[Validate] MooGold OK — playerId:', playerId, '/ username:', result.username);
     return sendJSON(res, 200, { ok: true, username: result.username, message: result.message || '' });
   }
   if (result.ok === false) {
-    // [FIX] MooGold validate rejects valid Zone IDs (e.g. 10050) for some
-    // variation_ids even though create_order succeeds. Don't block — fall
-    // through to hybrid self-confirm. Order #43682939 confirmed 10050 works.
     console.log('[Validate] MooGold rejected (hybrid fallback) — playerId:', playerId, '/', result.message);
   }
-  // ok === null — validate unavailable, fall back to manual confirm
   console.log('[Validate] skipped (fallback) — playerId:', playerId, '/ serverId:', serverId);
   return sendJSON(res, 200, { ok: true, username: '', skipped: true, message: 'សូមបញ្ជាក់ Player ID + Zone ID ខ្លួនឯង ក្នុង Game មុន' });
 }
@@ -965,12 +935,7 @@ async function handleOrderDeeplink(req, res, query) {
   const a = crypto.createHash('sha256').update(token).digest();
   const b = crypto.createHash('sha256').update(order.payToken).digest();
   if (!crypto.timingSafeEqual(a, b)) return sendJSON(res, 404, { ok: false, error: 'Not found' });
-  // Return cached deeplink if already built
   if (order.khqr.deeplink) return sendJSON(res, 200, { ok: true, deeplink: order.khqr.deeplink });
-  // Build ABA Pay deeplink directly from KHQR string (no Bakong API needed)
-  // Format: abamobilebank://aba_pay?qr=<EMV_KHQR>
-  // Client uses location.href to trigger — iOS hands custom scheme to ABA app
-  // which opens on QR payment screen with merchant name + amount pre-filled.
   const qrString = order.khqr && order.khqr.qr;
   if (!qrString) return sendJSON(res, 200, { ok: true, deeplink: null });
   const abaDeeplink = 'abamobilebank://aba_pay?qr=' + encodeURIComponent(qrString);
@@ -1028,7 +993,7 @@ async function handleMooGoldCallback(req, res) {
       notifyTelegram(`🎮 <b>Diamond បញ្ចូលរួចរាល់! ✅</b>\n🔖 Code: ${order.code}\n📦 ${order.packageName} — $${order.price.toFixed(2)}\n🎮 ${order.gameName} | <code>${order.playerId}</code>${order.serverId ? ` (${order.serverId})` : ''}\n🆔 MooGold Order: ${moogoldOrderId}`);
     } else if (status === 'refunded') {
       order.moogoldStatus = 'refunded'; order.note = appendNote(order.note, '🔴 MooGold refunded (callback)'); order.updatedAt = new Date().toISOString(); db.writeDB(data);
-      notifyTelegram(`🔴 <b>MooGold REFUNDED!</b>\n🔖 Code: ${order.code}\n🆔 MooGold Order: ${moogoldOrderId}\n⚠️ <b>ពិនិត្យ Player ID + Server ID!</b>`);
+      notifyTelegram(`🔴 <b>MooGold REFUNDED!</b>\n🔖 Code: ${order.code}\n🆔 MooGold Order: ${moogoldOrderId}\n⚠️ <b>ពិនិត្យ Player ID + Zone ID!</b>`);
     } else if (status === 'incorrect-details') {
       order.moogoldStatus = 'incorrect-details'; order.note = appendNote(order.note, '⚠️ MooGold incorrect-details (callback)'); order.updatedAt = new Date().toISOString(); db.writeDB(data);
       notifyTelegram(`⚠️ <b>MooGold: Incorrect Details!</b>\n🔖 Code: ${order.code}\n🆔 MooGold Order: ${moogoldOrderId}\n🔔 <b>Player ID ខុស — ទាក់ទង MooGold CS!</b>`);
@@ -1270,7 +1235,6 @@ async function handleDeletePackage(req, res, params) {
   if (idx === -1) return sendJSON(res, 404, { ok: false, error: 'Package not found' });
   data.packages.splice(idx, 1); db.writeDB(data); sendJSON(res, 200, { ok: true });
 }
-
 
 // ═════════════════════════════════════════════
 //  Route handlers — admin site settings
@@ -1589,7 +1553,6 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname.startsWith('/static/')) return serveStatic(req, res, pathname.replace('/static', ''));
 
-    // ── Public ─────────────────────────────────────────────────────────────
     if (pathname === '/'                              && method === 'GET')  return handleTopupSelectPage(req, res);
     if (pathname === '/topup'                         && method === 'GET')  return send(res, 302, '', { Location: '/' });
     if (pathname === '/topup/order'                   && method === 'GET')  return handleTopupPackagePage(req, res, query);
@@ -1611,16 +1574,13 @@ const server = http.createServer(async (req, res) => {
       return handleDebugIp(req, res);
     }
 
-    // ── Admin auth ─────────────────────────────────────────────────────────
     if (pathname === '/admin/login'  && method === 'GET')  return handleAdminLoginPage(req, res);
     if (pathname === '/admin/login'  && method === 'POST') return handleAdminLoginSubmit(req, res);
     if (pathname === '/admin/logout' && method === 'POST') return handleAdminLogout(req, res);
 
-    // ── Admin dashboard ────────────────────────────────────────────────────
     if (pathname === '/admin'                 && method === 'GET')  return handleAdminDashboard(req, res, query);
     if (pathname === '/admin/change-password' && method === 'POST') return handleChangePassword(req, res);
 
-    // ── Admin API — orders ─────────────────────────────────────────────────
     let m;
     m = pathname.match(/^\/api\/admin\/orders\/([^/]+)\/status$/);
     if (m && method === 'POST')   return handleUpdateOrderStatus(req, res, { orderId: m[1] });
@@ -1635,7 +1595,6 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/admin/orders/bulk-delete'      && method === 'POST') return handleBulkDeleteOrders(req, res);
     if (pathname === '/api/admin/orders/bulk-hard-delete' && method === 'POST') return handleBulkHardDeleteOrders(req, res);
 
-    // ── Admin API — packages ───────────────────────────────────────────────
     if (pathname === '/api/admin/packages' && method === 'POST') return handleCreatePackage(req, res);
     m = pathname.match(/^\/api\/admin\/packages\/([^/]+)\/icon$/);
     if (m && method === 'POST')   return handleUploadPackageIcon(req, res, { packageId: m[1] });
@@ -1644,7 +1603,6 @@ const server = http.createServer(async (req, res) => {
     if (m && method === 'PATCH')  return handleUpdatePackage(req, res, { packageId: m[1] });
     if (m && method === 'DELETE') return handleDeletePackage(req, res, { packageId: m[1] });
 
-    // ── Admin API — settings ───────────────────────────────────────────────
     if (pathname === '/api/admin/settings/colors'                && method === 'POST')   return handleUpdateColors(req, res);
     if (pathname === '/api/admin/settings/profile-image'         && method === 'POST')   return handleUploadProfileImage(req, res);
     if (pathname === '/api/admin/settings/profile-image'         && method === 'DELETE') return handleRemoveCustomImage(req, res, { target: 'profile' });
@@ -1691,6 +1649,19 @@ const server = http.createServer(async (req, res) => {
 //  Boot
 // ─────────────────────────────────────────────
 db.ensureDataFile();
+// [FIX] Ensure MLBB always has requiresServerId=true in DB — this survives
+// even if a fresh volume mount resets in-memory assumptions.
+try {
+  const _d = db.readDB();
+  let _changed = false;
+  (_d.games || []).forEach(function(g) {
+    if ((g.id === 'mlbb' || (g.name || '').toLowerCase().includes('mobile legend')) && !g.requiresServerId) {
+      g.requiresServerId = true; _changed = true;
+      console.log('[Boot] Set requiresServerId=true for game:', g.id);
+    }
+  });
+  if (_changed) db.writeDB(_d);
+} catch (e) { console.error('[Boot] requiresServerId fix failed:', e.message); }
 db.ensureUploadsDir();
 server.listen(PORT, () => {
   console.log(`Wanfunzy server running → http://localhost:${PORT}`);
