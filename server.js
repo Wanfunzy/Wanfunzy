@@ -888,7 +888,10 @@ async function handleValidatePlayer(req, res, query) {
   const serverId = (query.serverId || '').trim();
   if (!playerId || !/^[0-9]{4,20}$/.test(playerId)) return sendJSON(res, 400, { ok: false, message: 'Player ID មិនត្រឹមត្រូវ។' });
   if (!serverId || !/^[0-9]{1,6}$/.test(serverId))  return sendJSON(res, 400, { ok: false, message: 'Server ID មិនត្រឹមត្រូវ។' });
-  const MLBB_MOOGOLD_PRODUCT_ID = '4700134';
+  // [FIX] MooGold CS confirmed: use product ID 15145 (global region) for
+  // validate — this is the correct ID and validation works with it.
+  // 4700134 is a variation_id (specific package), not the product page ID.
+  const MLBB_MOOGOLD_PRODUCT_ID = '15145';
   const result = await validateMLBBPlayer(playerId, serverId, MLBB_MOOGOLD_PRODUCT_ID);
   if (result.ok === true) {
     console.log('[Validate] MooGold OK — playerId:', playerId, '/ username:', result.username);
