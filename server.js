@@ -178,14 +178,16 @@ async function fulfillWithMooGold(order) {
     quantity:     1,
     'User ID':    String(order.playerId)
   };
-  // [FIX] Trying "Zone_ID" (underscore) — "Zone ID" (space) and "Server"
-  // both resulted in MooGold echoing back an empty Server ID in
-  // account_details. Testing underscore variant per Saem's request.
-  if (order.serverId) orderData['Zone_ID'] = String(order.serverId);
+  // [FIX] Confirmed by MooGold CS: the correct field name for MLBB is
+  // "Server ID" (with a space) — NOT "Server", "Zone ID", or "Zone_ID".
+  // CS also noted: different products may require different field names;
+  // call product/product_detail to get the exact field list per product
+  // if this ever needs to be made fully dynamic in the future.
+  if (order.serverId) orderData['Server ID'] = String(order.serverId);
 
   console.log('[MooGold] create_order payload:', JSON.stringify({
     'product-id': order.moogoldProductId, 'User ID': order.playerId,
-    'Zone_ID': order.serverId || '(none)'
+    'Server ID': order.serverId || '(none)'
   }));
 
   const payload        = { path: 'order/create_order', data: orderData, partnerOrderId: order.code };
@@ -218,10 +220,10 @@ async function fulfillWithMooGold(order) {
 
 async function validatePlayerWithMooGold(productId, playerId, serverId) {
   if (!moogoldEnabled() || !productId) return { ok: null };
-  // [FIX] Use "Zone_ID" key here too, matching create_order.
+  // [FIX] Confirmed field name: "Server ID" (per MooGold CS).
   const payload = {
     path: 'product/validate',
-    data: { 'product-id': String(productId), 'User ID': String(playerId), ...(serverId ? { 'Zone_ID': String(serverId) } : {}) }
+    data: { 'product-id': String(productId), 'User ID': String(playerId), ...(serverId ? { 'Server ID': String(serverId) } : {}) }
   };
   try {
     const result = await moogoldRequest('product/validate', payload, payload);
