@@ -349,16 +349,29 @@ async function validateGamePlayer(gameId, playerId, serverId) {
   if (moogoldEnabled()) {
     const mgResult = await validatePlayerWithMooGold(MOOGOLD_PRODUCT_ID, playerId, serverId);
 
-    // [FIX] ok:true is sufficient — username may be null for FF/PUBG/HOK
     if (mgResult.ok === true) {
-      let username = mgResult.username || '';
-      // For Free Fire: MooGold doesn't return username, try third-party lookup
-      if (isFF && !username) {
-        console.log('[Validate][FF] MooGold confirmed account — fetching username via fgamers.services');
-        username = await lookupFreeFireUsername(playerId);
+      // [CRITICAL FIX] MooGold's Free Fire validate (product 7847) does NOT
+      // actually check if the account exists — it returns status:true for
+      // ANY numeric ID, even fake ones like "123123123". Confirmed by testing:
+      // MooGold returned {"status":"true","username":null} for a made-up ID.
+      // So for Free Fire, MooGold's status:true is NOT proof of a real account —
+      // the ONLY real proof is a username successfully returned by fgamers.services.
+      // If that lookup fails, we must BLOCK, not unlock.
+      if (isFF) {
+        console.log('[Validate][FF] MooGold format-check passed — confirming real account via fgamers.services');
+        const username = await lookupFreeFireUsername(playerId);
+        if (username) {
+          console.log('[Validate][FF] SUCCESS — real account confirmed, username:', username);
+          return { ok: true, username };
+        }
+        console.log('[Validate][FF] BLOCKED — no real account found for playerId:', playerId);
+        return { ok: false, message: 'រកមិនឃើញគណនី Free Fire នេះទេ។ សូមពិនិត្យ Player ID ម្តងទៀត។' };
       }
-      console.log('[Validate][MooGold] SUCCESS — game:', gid, '| username:', username || '(none)');
-      return { ok: true, username };
+
+      // MLBB / PUBG / HOK: MooGold's validate is a real account check —
+      // status:true is sufficient proof even if username is empty.
+      console.log('[Validate][MooGold] SUCCESS — game:', gid, '| username:', mgResult.username || '(none)');
+      return { ok: true, username: mgResult.username || '' };
     }
     if (mgResult.ok === false) {
       console.log('[Validate][MooGold] BLOCKED — game:', gid, '|', mgResult.message);
