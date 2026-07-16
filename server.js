@@ -892,17 +892,36 @@ async function handleValidatePlayer(req, res, query) {
   const playerId = (query.playerId || '').trim();
   const serverId = (query.serverId || '').trim();
   if (!playerId || !/^[0-9]{4,20}$/.test(playerId)) return sendJSON(res, 400, { ok: false, message: 'Player ID មិនត្រឹមត្រូវ។' });
-  // [FIX] This endpoint is currently called by MLBB only (client passes serverId always).
-  // MLBB + PUBG require Zone/Server ID; Free Fire + HOK do NOT.
-  // For MLBB validation we still require serverId — but validate format only if provided,
-  // so the endpoint stays usable if called for non-serverId games in the future.
-  if (serverId && !/^[0-9]{1,6}$/.test(serverId)) return sendJSON(res, 400, { ok: false, message: 'Server ID មិនត្រឹមត្រូវ។' });
-  // MLBB always requires serverId — reject if missing (MLBB-specific guard)
+  // Determine which game this validate call is for.
+  // Only MLBB has a confirmed MooGold product ID (15145) for live player lookup.
+  // PUBG Mobile also requires Server ID but has no validated product ID yet.
+  // Free Fire + HOK do NOT require Server ID and have no MooGold validate endpoint.
+  // [CRITICAL FIX] Never run a non-MLBB player ID through the MLBB product (15145)
+  // on MooGold — MooGold will correctly return "Incorrect User ID / Zone ID" because
+  // a Free Fire / HOK / PUBG player ID doesn't exist in MLBB's database.
+  // Those games skip MooGold entirely and return skipped=true so the client
+  // proceeds with format-only validation + user self-confirmation.
   const _gameIdParam = (query.gameId || '').trim().toLowerCase();
-  const _isMlbbValidate = !_gameIdParam || _gameIdParam === 'mlbb';
-  if (_isMlbbValidate && (!serverId || !/^[0-9]{1,6}$/.test(serverId))) return sendJSON(res, 400, { ok: false, message: 'Server ID មិនត្រឹមត្រូវ។' });
+  const _isMlbb = !_gameIdParam || _gameIdParam === 'mlbb' || _gameIdParam.includes('mobile');
+  const _isPubg  = _gameIdParam === 'pubg' || _gameIdParam.includes('pubg');
+  const _needsServerIdGame = _isMlbb || _isPubg;
+
+  // Reject invalid serverId format only if this game actually requires one.
+  if (_needsServerIdGame && serverId && !/^[0-9]{1,6}$/.test(serverId))
+    return sendJSON(res, 400, { ok: false, message: 'Server ID មិនត្រឹមត្រូវ។' });
+  // MLBB always requires serverId — block if missing.
+  if (_isMlbb && (!serverId || !/^[0-9]{1,6}$/.test(serverId)))
+    return sendJSON(res, 400, { ok: false, message: 'Server ID មិនត្រឹមត្រូវ។' });
+
+  // Free Fire + HOK (and any unknown game): skip MooGold validate entirely.
+  // Return skipped=true so client proceeds with format-only self-confirmation.
+  if (!_isMlbb && !_isPubg) {
+    console.log('[Validate] skipped — non-MLBB/PUBG game:', _gameIdParam, '| playerId:', playerId);
+    return sendJSON(res, 200, { ok: true, username: '', skipped: true, message: 'សូមបញ្ជាក់ Player ID ខ្លួនឯង ក្នុង Game មុន' });
+  }
+
   // [FIX] MooGold CS confirmed: use product ID 15145 (global region) for
-  // validate — this is the correct ID and validation works with it.
+  // MLBB validate — this is the correct ID and validation works with it.
   // 4700134 is a variation_id (specific package), not the product page ID.
   const MLBB_MOOGOLD_PRODUCT_ID = '15145';
   const result = await validateMLBBPlayer(playerId, serverId, MLBB_MOOGOLD_PRODUCT_ID);
