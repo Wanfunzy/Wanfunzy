@@ -151,12 +151,7 @@ async function fulfillWithMooGold(order) {
 
   const isMlbb = (order.gameId   || '').toLowerCase() === 'mlbb' ||
                  (order.gameName || '').toLowerCase().includes('mobile legend');
-  // [FIX] PUBG Mobile also requires Zone ID — hardcode as safety net identical
-  // to MLBB above. DB lookup below confirms via requiresServerId flag, but if
-  // DB read fails we must NOT allow PUBG to slip through without serverId.
-  const isPubg = (order.gameId   || '').toLowerCase() === 'pubg' ||
-                 (order.gameName || '').toLowerCase().includes('pubg');
-  let gameRequiresServer = isMlbb || isPubg;
+  let gameRequiresServer = isMlbb;
   try {
     const snap    = db.readDB();
     const gameDoc = snap.games && snap.games.find(g => g.id === order.gameId);
@@ -251,68 +246,130 @@ async function validatePlayerWithMooGold(productId, playerId, serverId) {
   } catch (e) { console.error('[MooGold] validate error:', e.message); return { ok: null, error: e.message }; }
 }
 
-// Renamed from validateMLBBPlayer → validateGamePlayer now that all 4 games use this path.
-// MLBB_WORKER_URL is still MLBB-only (Cloudflare Worker for MLBB player lookup);
-// PUBG / Free Fire / HOK go straight to MooGold validate with their own product IDs.
-async function validateGamePlayer(gameId, playerId, serverId, moogoldProductId) {
-  // MLBB Worker path — only attempted when MLBB_WORKER_URL is configured
-  // and this is actually an MLBB lookup. Other games skip this entirely.
-  const isMlbb = !gameId || gameId === 'mlbb' || gameId.includes('mobile');
-  const workerUrl = process.env.MLBB_WORKER_URL;
-  if (isMlbb && workerUrl) {
-    try {
-      const result = await new Promise((resolve) => {
-        const body         = JSON.stringify({ playerId: String(playerId), serverId: String(serverId || '0') });
-        const workerSecret = process.env.MLBB_WORKER_SECRET || '';
-        let u;
-        try { u = new URL(workerUrl); } catch (e) { return resolve({ ok: null, error: 'Bad worker URL' }); }
-        const headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
-        if (workerSecret) headers['X-Worker-Secret'] = workerSecret;
-        const req = https.request(
-          { hostname: u.hostname, path: u.pathname, method: 'POST', headers, timeout: 8000 },
-          (res) => {
-            let data = '';
-            res.on('data', c => { data += c; });
-            res.on('end', () => {
-              try {
-                const json = JSON.parse(data);
-                if (json.ok === true && json.username) resolve({ ok: true, username: json.username });
-                else if (json.ok === false)            resolve({ ok: false, message: json.message || 'Player ID ឬ Zone ID មិនត្រឹមត្រូវ' });
-                else                                   resolve({ ok: null, error: 'Worker response unclear' });
-              } catch (e) { resolve({ ok: null, error: 'Parse error' }); }
-            });
-          }
-        );
-        req.on('error',   e  => resolve({ ok: null, error: e.message }));
-        req.on('timeout', () => { req.destroy(); resolve({ ok: null, error: 'Worker timeout' }); });
-        req.write(body); req.end();
-      });
-      console.log('[Validate][MLBB Worker] result:', result.ok, result.username || result.message);
-      if (result.ok === true || result.ok === false) return result;
-      console.log('[Validate][MLBB Worker] unavailable:', result.error, '— falling back to MooGold');
-    } catch (e) { console.log('[Validate][MLBB Worker] threw:', e.message, '— falling back to MooGold'); }
+// ── Free Fire / PUBG / HOK username lookup via fgamers.services ──────────
+// Garena's validate API (product 7847) returns status:true but username:null
+// for all games. fgamers.services is an unofficial but widely-used Free Fire
+// player lookup used by Cambodian resellers (karinatopup etc.). Falls back
+// gracefully — if the endpoint is down, MooGold status:true is still enough
+// to confirm the account exists and unlock packages (no username shown).
+async function lookupFreeFireUsername(playerId) {
+  return new Promise((resolve) => {
+    // Try multiple regions — Cambodia players are usually on sg (Singapore)
+    const regions = ['sg', 'ind', 'id', 'th', 'vn', 'my'];
+    let tried = 0;
+    function tryRegion(region) {
+      const hostname = `${region}-freefire.fgamers.services`;
+      const reqPath  = `/player?uid=${encodeURIComponent(playerId)}`;
+      const req = https.request(
+        { hostname, path: reqPath, method: 'GET', timeout: 5000,
+          headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } },
+        (res) => {
+          let data = '';
+          res.on('data', c => { data += c; });
+          res.on('end', () => {
+            try {
+              const json = JSON.parse(data);
+              const name = (json && (json.basicInfo && json.basicInfo.nickname)) ||
+                           (json && json.nickname) || (json && json.name) || '';
+              if (name) { console.log('[FF Lookup] found username:', name, 'region:', region); return resolve(name); }
+            } catch (e) {}
+            tried++;
+            if (tried < regions.length) tryRegion(regions[tried]);
+            else { console.log('[FF Lookup] no username found for', playerId); resolve(''); }
+          });
+        }
+      );
+      req.on('error',   () => { tried++; if (tried < regions.length) tryRegion(regions[tried]); else resolve(''); });
+      req.on('timeout', () => { req.destroy(); tried++; if (tried < regions.length) tryRegion(regions[tried]); else resolve(''); });
+      req.end();
+    }
+    tryRegion(regions[0]);
+  });
+}
+
+// Renamed from validateMLBBPlayer → validateGamePlayer.
+// Routes each game to the correct MooGold product ID, and for Free Fire
+// also attempts a third-party username lookup so the UI can display the
+// real in-game name (like Karina TopUp does).
+//
+// MooGold product page IDs (confirmed):
+//   MLBB        → 15145   (reseller.moogold.com/product.php?product=15145&category=50)
+//   PUBG Mobile → 6963    (reseller.moogold.com/product.php?product=6963&category=50)
+//   Free Fire   → 7847    (reseller.moogold.com/product.php?product=7847&category=50)
+//   HOK (Global)→ 5177311 (reseller.moogold.com/product.php?product=5177311&category=50)
+async function validateGamePlayer(gameId, playerId, serverId) {
+  const gid = (gameId || '').toLowerCase();
+  const isMlbb = !gid || gid === 'mlbb' || gid.includes('mobile');
+  const isPubg  = gid === 'pubg' || gid === 'pubgm' || gid.includes('pubg');
+  const isFF    = gid === 'ff'   || gid === 'freefire' || gid.includes('free');
+  const isHok   = gid === 'hok'  || gid.includes('honor');
+
+  // MLBB Worker path — only for MLBB, skipped for all other games
+  if (isMlbb) {
+    const workerUrl = process.env.MLBB_WORKER_URL;
+    if (workerUrl) {
+      try {
+        const result = await new Promise((resolve) => {
+          const body         = JSON.stringify({ playerId: String(playerId), serverId: String(serverId || '0') });
+          const workerSecret = process.env.MLBB_WORKER_SECRET || '';
+          let u;
+          try { u = new URL(workerUrl); } catch (e) { return resolve({ ok: null, error: 'Bad worker URL' }); }
+          const headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
+          if (workerSecret) headers['X-Worker-Secret'] = workerSecret;
+          const req = https.request(
+            { hostname: u.hostname, path: u.pathname, method: 'POST', headers, timeout: 8000 },
+            (res) => {
+              let data = '';
+              res.on('data', c => { data += c; });
+              res.on('end', () => {
+                try {
+                  const json = JSON.parse(data);
+                  if (json.ok === true && json.username) resolve({ ok: true, username: json.username });
+                  else if (json.ok === false)            resolve({ ok: false, message: json.message || 'Player ID ឬ Zone ID មិនត្រឹមត្រូវ' });
+                  else                                   resolve({ ok: null, error: 'Worker response unclear' });
+                } catch (e) { resolve({ ok: null, error: 'Parse error' }); }
+              });
+            }
+          );
+          req.on('error',   e  => resolve({ ok: null, error: e.message }));
+          req.on('timeout', () => { req.destroy(); resolve({ ok: null, error: 'Worker timeout' }); });
+          req.write(body); req.end();
+        });
+        console.log('[Validate][MLBB Worker] result:', result.ok, result.username || result.message);
+        if (result.ok === true || result.ok === false) return result;
+        console.log('[Validate][MLBB Worker] unavailable:', result.error, '— falling back to MooGold');
+      } catch (e) { console.log('[Validate][MLBB Worker] threw:', e.message, '— falling back to MooGold'); }
+    }
   }
 
-  if (moogoldProductId && moogoldEnabled()) {
-    const mgResult = await validatePlayerWithMooGold(moogoldProductId, playerId, serverId);
-    // [FIX] ok:true is sufficient for success — username may be empty/null for
-    // Free Fire, PUBG Mobile, and HOK because MooGold's validate endpoint for
-    // those games confirms the account exists (status:"true") but does not return
-    // a username. Checking `&& mgResult.username` caused falsy '' to fall through
-    // to the "not authorized" branch even though the account was validated.
+  // MooGold validate — confirm account exists for all 4 games
+  const MOOGOLD_PRODUCT_ID = isPubg ? '6963' : isFF ? '7847' : isHok ? '5177311' : '15145';
+  console.log('[Validate] game:', gid, '| productId:', MOOGOLD_PRODUCT_ID, '| playerId:', playerId, '| serverId:', serverId || '(none)');
+
+  if (moogoldEnabled()) {
+    const mgResult = await validatePlayerWithMooGold(MOOGOLD_PRODUCT_ID, playerId, serverId);
+
+    // [FIX] ok:true is sufficient — username may be null for FF/PUBG/HOK
     if (mgResult.ok === true) {
-      console.log('[Validate][MooGold] SUCCESS — game:', gameId, '| username:', mgResult.username || '(none)');
-      return { ok: true, username: mgResult.username || '' };
+      let username = mgResult.username || '';
+      // For Free Fire: MooGold doesn't return username, try third-party lookup
+      if (isFF && !username) {
+        console.log('[Validate][FF] MooGold confirmed account — fetching username via fgamers.services');
+        username = await lookupFreeFireUsername(playerId);
+      }
+      console.log('[Validate][MooGold] SUCCESS — game:', gid, '| username:', username || '(none)');
+      return { ok: true, username };
     }
     if (mgResult.ok === false) {
-      console.log('[Validate][MooGold] BLOCKED — game:', gameId, '|', mgResult.message);
+      console.log('[Validate][MooGold] BLOCKED — game:', gid, '|', mgResult.message);
       return { ok: false, message: mgResult.message };
     }
-    console.log('[Validate][MooGold] not authorized for product:', moogoldProductId, '— hybrid pass');
+    console.log('[Validate][MooGold] not authorized for product:', MOOGOLD_PRODUCT_ID);
   }
 
-  console.log('[Validate] all paths unavailable — hybrid pass for game:', gameId, '| playerId:', playerId);
-  return { ok: null, error: 'all paths unavailable' };
+  // [POLICY] All paths unavailable — block purchase. Never let unverified ID through.
+  console.log('[Validate] BLOCKED (all paths unavailable) — game:', gid, '| playerId:', playerId);
+  return { ok: false, message: 'មិនអាចផ្ទៀងផ្ទាត់ Player ID បានទេនៅពេលនេះ។ សូមព្យាយាមម្តងទៀត ឬទាក់ទង admin។' };
 }
 
 async function pollMooGoldOrderStatus(orderCode, moogoldOrderId, maxAttempts = 30) {
@@ -900,67 +957,29 @@ async function handleCreateTopupOrder(req, res) {
 async function handleValidatePlayer(req, res, query) {
   const ip = getClientIp(req);
   if (isRateLimited(ip, 'validate', 20, 60 * 1000)) return sendJSON(res, 429, { ok: false, message: 'សកម្មភាពញឹកញាប់ពេក។ សូមរង់ចាំ។' });
-  const playerId = (query.playerId || '').trim();
-  const serverId = (query.serverId || '').trim();
-  if (!playerId || !/^[0-9]{4,20}$/.test(playerId)) return sendJSON(res, 400, { ok: false, message: 'Player ID មិនត្រឹមត្រូវ។' });
-  // Determine which game this validate call is for.
-  // Only MLBB has a confirmed MooGold product ID (15145) for live player lookup.
-  // PUBG Mobile also requires Server ID but has no validated product ID yet.
-  // Free Fire + HOK do NOT require Server ID and have no MooGold validate endpoint.
-  // [CRITICAL FIX] Never run a non-MLBB player ID through the MLBB product (15145)
-  // on MooGold — MooGold will correctly return "Incorrect User ID / Zone ID" because
-  // a Free Fire / HOK / PUBG player ID doesn't exist in MLBB's database.
-  // Those games skip MooGold entirely and return skipped=true so the client
-  // proceeds with format-only validation + user self-confirmation.
-  const _gameIdParam = (query.gameId || '').trim().toLowerCase();
-  const _isMlbb = !_gameIdParam || _gameIdParam === 'mlbb' || _gameIdParam.includes('mobile');
-  const _isPubg  = _gameIdParam === 'pubg' || _gameIdParam.includes('pubg');
-  const _needsServerIdGame = _isMlbb || _isPubg;
 
-  // Reject invalid serverId format only if this game actually requires one.
-  if (_needsServerIdGame && serverId && !/^[0-9]{1,6}$/.test(serverId))
-    return sendJSON(res, 400, { ok: false, message: 'Server ID មិនត្រឹមត្រូវ។' });
-  // MLBB always requires serverId — block if missing.
-  if (_isMlbb && (!serverId || !/^[0-9]{1,6}$/.test(serverId)))
-    return sendJSON(res, 400, { ok: false, message: 'Server ID មិនត្រឹមត្រូវ។' });
+  const playerId  = (query.playerId || '').trim();
+  const serverId  = (query.serverId || '').trim();
+  const gameIdRaw = (query.gameId   || '').trim().toLowerCase();
 
-  // MooGold product page IDs (all 4 games confirmed):
-  //   MLBB        → 15145   (reseller.moogold.com/product.php?product=15145&category=50)
-  //   PUBG Mobile → 6963    (reseller.moogold.com/product.php?product=6963&category=50)
-  //   Free Fire   → 7847    (reseller.moogold.com/product.php?product=7847&category=50)
-  //   HOK (Global)→ 5177311 (reseller.moogold.com/product.php?product=5177311&category=50)
-  const _isFF  = _gameIdParam === 'ff' || _gameIdParam === 'freefire' || _gameIdParam.includes('free');
-  const _isHok = _gameIdParam === 'hok' || _gameIdParam.includes('honor');
+  if (!playerId || !/^[0-9]{4,20}$/.test(playerId))
+    return sendJSON(res, 400, { ok: false, message: 'Player ID មិនត្រឹមត្រូវ។' });
 
-  // Unknown games: skip MooGold validate entirely.
-  if (!_isMlbb && !_isPubg && !_isFF && !_isHok) {
-    console.log('[Validate] blocked — unsupported game:', _gameIdParam, '| playerId:', playerId);
-    return sendJSON(res, 200, { ok: false, message: 'Game នេះមិនអាច validate Player ID បានទេ។ សូមទាក់ទង admin។' });
-  }
+  // MLBB + PUBG require Server/Zone ID; Free Fire + HOK do NOT.
+  const needsServer = !gameIdRaw || gameIdRaw === 'mlbb' || gameIdRaw.includes('mobile') ||
+                      gameIdRaw === 'pubg' || gameIdRaw === 'pubgm' || gameIdRaw.includes('pubg');
+  if (needsServer && (!serverId || !/^[0-9]{1,6}$/.test(serverId)))
+    return sendJSON(res, 400, { ok: false, message: 'Server ID / Zone ID មិនត្រឹមត្រូវ។' });
 
-  const MOOGOLD_PRODUCT_ID = _isPubg ? '6963' : _isFF ? '7847' : _isHok ? '5177311' : '15145';
-  console.log('[Validate] game:', _gameIdParam, '| productId:', MOOGOLD_PRODUCT_ID, '| playerId:', playerId, '| serverId:', serverId || '(none)');
-  const result = await validateGamePlayer(_gameIdParam, playerId, serverId, MOOGOLD_PRODUCT_ID);
+  const result = await validateGamePlayer(gameIdRaw, playerId, serverId);
+
   if (result.ok === true) {
-    console.log('[Validate] MooGold OK — playerId:', playerId, '/ username:', result.username);
-    return sendJSON(res, 200, { ok: true, username: result.username, message: result.message || '' });
+    console.log('[Validate] SUCCESS — game:', gameIdRaw, '| playerId:', playerId, '| username:', result.username || '(none)');
+    return sendJSON(res, 200, { ok: true, username: result.username || '', message: '' });
   }
-  if (result.ok === false) {
-    // [FIX per Saem's request] MooGold explicitly confirmed this Player ID
-    // + Zone ID combination is WRONG — block the purchase instead of
-    // silently falling through to hybrid mode. This prevents customers
-    // topping up an invalid/non-existent account. Hybrid pass is only
-    // used below when validate itself is unavailable (result.ok === null),
-    // e.g. worker down or MooGold endpoint not authorized for this product.
-    console.log('[Validate] MooGold REJECTED — playerId:', playerId, '/', result.message);
-    return sendJSON(res, 200, { ok: false, message: result.message || 'Player ID ឬ Server ID មិនត្រឹមត្រូវ។ សូមពិនិត្យម្តងទៀត។' });
-  }
-  // [POLICY] All validate paths unavailable (MooGold endpoint not authorized,
-  // Worker down, etc.) — block the purchase. We never let a customer buy on
-  // an unconfirmed Player ID; admin must resolve the MooGold product/validate
-  // authorization before sales can proceed.
-  console.log('[Validate] BLOCKED (all paths unavailable) — game:', _gameIdParam, '| playerId:', playerId);
-  return sendJSON(res, 200, { ok: false, message: 'មិនអាចផ្ទៀងផ្ទាត់ Player ID បានទេនៅពេលនេះ។ សូមព្យាយាមម្តងទៀត ឬទាក់ទង admin។' });
+  // ok:false OR ok:null — both block. [POLICY] No skipped/hybrid pass.
+  console.log('[Validate] BLOCKED — game:', gameIdRaw, '| playerId:', playerId, '|', result.message || result.error);
+  return sendJSON(res, 200, { ok: false, message: result.message || 'មិនអាចផ្ទៀងផ្ទាត់ Player ID បានទេ។ សូមព្យាយាមម្តងទៀត។' });
 }
 
 async function handleOrderPaymentStatus(req, res, query) {
@@ -1716,14 +1735,9 @@ const server = http.createServer(async (req, res) => {
 //  Boot
 // ─────────────────────────────────────────────
 db.ensureDataFile();
-// [FIX] Ensure MLBB + PUBG Mobile always have requiresServerId=true in DB,
-// and Free Fire + HOK always have requiresServerId=false.
-// This survives even if a fresh volume mount resets in-memory assumptions.
-// Source of truth per game table:
-//   MLBB         → requiresServerId = true  (needs Player ID + Zone ID)
-//   PUBG Mobile  → requiresServerId = true  (needs Player ID + Server ID)
-//   Free Fire    → requiresServerId = false (Player ID only)
-//   HOK          → requiresServerId = false (Player ID only)
+// [FIX] Enforce requiresServerId for all 4 games at boot time.
+//   MLBB + PUBG Mobile → true  (need Player ID + Zone/Server ID)
+//   Free Fire + HOK    → false (Player ID only)
 try {
   const _d = db.readDB();
   let _changed = false;
@@ -1731,16 +1745,16 @@ try {
     const _id   = (g.id   || '').toLowerCase();
     const _name = (g.name || '').toLowerCase();
     const _isMlbb = _id === 'mlbb'  || _name.includes('mobile legend');
-    const _isPubg = _id === 'pubg'  || _name.includes('pubg');
+    const _isPubg = _id === 'pubg'  || _id === 'pubgm' || _name.includes('pubg');
     const _isFF   = _id === 'ff'    || _id === 'freefire' || _name.includes('free fire');
     const _isHok  = _id === 'hok'   || _name.includes('honor of kings');
     if ((_isMlbb || _isPubg) && !g.requiresServerId) {
       g.requiresServerId = true; _changed = true;
-      console.log('[Boot] Set requiresServerId=true for game:', g.id);
+      console.log('[Boot] requiresServerId=true for game:', g.id);
     }
     if ((_isFF || _isHok) && g.requiresServerId) {
       g.requiresServerId = false; _changed = true;
-      console.log('[Boot] Set requiresServerId=false for game:', g.id);
+      console.log('[Boot] requiresServerId=false for game:', g.id);
     }
   });
   if (_changed) db.writeDB(_d);
