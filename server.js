@@ -295,9 +295,14 @@ async function validateGamePlayer(gameId, playerId, serverId, moogoldProductId) 
 
   if (moogoldProductId && moogoldEnabled()) {
     const mgResult = await validatePlayerWithMooGold(moogoldProductId, playerId, serverId);
-    if (mgResult.ok === true && mgResult.username) {
-      console.log('[Validate][MooGold] SUCCESS — game:', gameId, '| username:', mgResult.username);
-      return { ok: true, username: mgResult.username };
+    // [FIX] ok:true is sufficient for success — username may be empty/null for
+    // Free Fire, PUBG Mobile, and HOK because MooGold's validate endpoint for
+    // those games confirms the account exists (status:"true") but does not return
+    // a username. Checking `&& mgResult.username` caused falsy '' to fall through
+    // to the "not authorized" branch even though the account was validated.
+    if (mgResult.ok === true) {
+      console.log('[Validate][MooGold] SUCCESS — game:', gameId, '| username:', mgResult.username || '(none)');
+      return { ok: true, username: mgResult.username || '' };
     }
     if (mgResult.ok === false) {
       console.log('[Validate][MooGold] BLOCKED — game:', gameId, '|', mgResult.message);
