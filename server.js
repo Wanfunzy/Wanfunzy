@@ -251,9 +251,15 @@ async function validatePlayerWithMooGold(productId, playerId, serverId) {
   } catch (e) { console.error('[MooGold] validate error:', e.message); return { ok: null, error: e.message }; }
 }
 
-async function validateMLBBPlayer(playerId, serverId, moogoldProductId) {
+// Renamed from validateMLBBPlayer → validateGamePlayer now that all 4 games use this path.
+// MLBB_WORKER_URL is still MLBB-only (Cloudflare Worker for MLBB player lookup);
+// PUBG / Free Fire / HOK go straight to MooGold validate with their own product IDs.
+async function validateGamePlayer(gameId, playerId, serverId, moogoldProductId) {
+  // MLBB Worker path — only attempted when MLBB_WORKER_URL is configured
+  // and this is actually an MLBB lookup. Other games skip this entirely.
+  const isMlbb = !gameId || gameId === 'mlbb' || gameId.includes('mobile');
   const workerUrl = process.env.MLBB_WORKER_URL;
-  if (workerUrl) {
+  if (isMlbb && workerUrl) {
     try {
       const result = await new Promise((resolve) => {
         const body         = JSON.stringify({ playerId: String(playerId), serverId: String(serverId || '0') });
@@ -281,26 +287,26 @@ async function validateMLBBPlayer(playerId, serverId, moogoldProductId) {
         req.on('timeout', () => { req.destroy(); resolve({ ok: null, error: 'Worker timeout' }); });
         req.write(body); req.end();
       });
-      console.log('[MLBB] Worker result:', result.ok, result.username || result.message);
+      console.log('[Validate][MLBB Worker] result:', result.ok, result.username || result.message);
       if (result.ok === true || result.ok === false) return result;
-      console.log('[MLBB] Worker unavailable:', result.error, '— trying MooGold validate');
-    } catch (e) { console.log('[MLBB] Worker threw:', e.message, '— trying MooGold validate'); }
+      console.log('[Validate][MLBB Worker] unavailable:', result.error, '— falling back to MooGold');
+    } catch (e) { console.log('[Validate][MLBB Worker] threw:', e.message, '— falling back to MooGold'); }
   }
 
   if (moogoldProductId && moogoldEnabled()) {
     const mgResult = await validatePlayerWithMooGold(moogoldProductId, playerId, serverId);
     if (mgResult.ok === true && mgResult.username) {
-      console.log('[MLBB] MooGold validate SUCCESS:', mgResult.username);
+      console.log('[Validate][MooGold] SUCCESS — game:', gameId, '| username:', mgResult.username);
       return { ok: true, username: mgResult.username };
     }
     if (mgResult.ok === false) {
-      console.log('[MLBB] MooGold validate BLOCKED:', mgResult.message);
+      console.log('[Validate][MooGold] BLOCKED — game:', gameId, '|', mgResult.message);
       return { ok: false, message: mgResult.message };
     }
-    console.log('[MLBB] MooGold validate not authorized — hybrid mode');
+    console.log('[Validate][MooGold] not authorized for product:', moogoldProductId, '— hybrid pass');
   }
 
-  console.log('[MLBB] All validate paths unavailable — hybrid pass for', playerId);
+  console.log('[Validate] all paths unavailable — hybrid pass for game:', gameId, '| playerId:', playerId);
   return { ok: null, error: 'all paths unavailable' };
 }
 
@@ -913,18 +919,23 @@ async function handleValidatePlayer(req, res, query) {
   if (_isMlbb && (!serverId || !/^[0-9]{1,6}$/.test(serverId)))
     return sendJSON(res, 400, { ok: false, message: 'Server ID មិនត្រឹមត្រូវ។' });
 
-  // Free Fire + HOK (and any unknown game): skip MooGold validate entirely.
-  // Return skipped=true so client proceeds with format-only self-confirmation.
-  if (!_isMlbb && !_isPubg) {
-    console.log('[Validate] skipped — non-MLBB/PUBG game:', _gameIdParam, '| playerId:', playerId);
-    return sendJSON(res, 200, { ok: true, username: '', skipped: true, message: 'សូមបញ្ជាក់ Player ID ខ្លួនឯង ក្នុង Game មុន' });
+  // MooGold product page IDs (all 4 games confirmed):
+  //   MLBB        → 15145   (reseller.moogold.com/product.php?product=15145&category=50)
+  //   PUBG Mobile → 6963    (reseller.moogold.com/product.php?product=6963&category=50)
+  //   Free Fire   → 7847    (reseller.moogold.com/product.php?product=7847&category=50)
+  //   HOK (Global)→ 5177311 (reseller.moogold.com/product.php?product=5177311&category=50)
+  const _isFF  = _gameIdParam === 'ff' || _gameIdParam === 'freefire' || _gameIdParam.includes('free');
+  const _isHok = _gameIdParam === 'hok' || _gameIdParam.includes('honor');
+
+  // Unknown games: skip MooGold validate entirely.
+  if (!_isMlbb && !_isPubg && !_isFF && !_isHok) {
+    console.log('[Validate] blocked — unsupported game:', _gameIdParam, '| playerId:', playerId);
+    return sendJSON(res, 200, { ok: false, message: 'Game នេះមិនអាច validate Player ID បានទេ។ សូមទាក់ទង admin។' });
   }
 
-  // [FIX] MooGold CS confirmed: use product ID 15145 (global region) for
-  // MLBB validate — this is the correct ID and validation works with it.
-  // 4700134 is a variation_id (specific package), not the product page ID.
-  const MLBB_MOOGOLD_PRODUCT_ID = '15145';
-  const result = await validateMLBBPlayer(playerId, serverId, MLBB_MOOGOLD_PRODUCT_ID);
+  const MOOGOLD_PRODUCT_ID = _isPubg ? '6963' : _isFF ? '7847' : _isHok ? '5177311' : '15145';
+  console.log('[Validate] game:', _gameIdParam, '| productId:', MOOGOLD_PRODUCT_ID, '| playerId:', playerId, '| serverId:', serverId || '(none)');
+  const result = await validateGamePlayer(_gameIdParam, playerId, serverId, MOOGOLD_PRODUCT_ID);
   if (result.ok === true) {
     console.log('[Validate] MooGold OK — playerId:', playerId, '/ username:', result.username);
     return sendJSON(res, 200, { ok: true, username: result.username, message: result.message || '' });
@@ -939,8 +950,12 @@ async function handleValidatePlayer(req, res, query) {
     console.log('[Validate] MooGold REJECTED — playerId:', playerId, '/', result.message);
     return sendJSON(res, 200, { ok: false, message: result.message || 'Player ID ឬ Server ID មិនត្រឹមត្រូវ។ សូមពិនិត្យម្តងទៀត។' });
   }
-  console.log('[Validate] skipped (fallback) — playerId:', playerId, '/ serverId:', serverId);
-  return sendJSON(res, 200, { ok: true, username: '', skipped: true, message: 'សូមបញ្ជាក់ Player ID + Zone ID ខ្លួនឯង ក្នុង Game មុន' });
+  // [POLICY] All validate paths unavailable (MooGold endpoint not authorized,
+  // Worker down, etc.) — block the purchase. We never let a customer buy on
+  // an unconfirmed Player ID; admin must resolve the MooGold product/validate
+  // authorization before sales can proceed.
+  console.log('[Validate] BLOCKED (all paths unavailable) — game:', _gameIdParam, '| playerId:', playerId);
+  return sendJSON(res, 200, { ok: false, message: 'មិនអាចផ្ទៀងផ្ទាត់ Player ID បានទេនៅពេលនេះ។ សូមព្យាយាមម្តងទៀត ឬទាក់ទង admin។' });
 }
 
 async function handleOrderPaymentStatus(req, res, query) {
