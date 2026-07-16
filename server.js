@@ -246,44 +246,43 @@ async function validatePlayerWithMooGold(productId, playerId, serverId) {
   } catch (e) { console.error('[MooGold] validate error:', e.message); return { ok: null, error: e.message }; }
 }
 
-// ── Free Fire / PUBG / HOK username lookup via fgamers.services ──────────
-// Garena's validate API (product 7847) returns status:true but username:null
-// for all games. fgamers.services is an unofficial but widely-used Free Fire
-// player lookup used by Cambodian resellers (karinatopup etc.). Falls back
-// gracefully — if the endpoint is down, MooGold status:true is still enough
-// to confirm the account exists and unlock packages (no username shown).
-async function lookupFreeFireUsername(playerId) {
+// ── Free Fire username lookup via Cloudflare Worker (ff-worker.js) ───────
+// MooGold's Free Fire validate (product 7847) does NOT actually check if
+// the account exists — it accepts any numeric ID. The real check is done
+// through a Cloudflare Worker (same architecture as MLBB_WORKER_URL) that
+// proxies Garena's shop2game.com nickname-lookup endpoint. Set FF_WORKER_URL
+// and FF_WORKER_SECRET env vars in Railway once the worker is deployed
+// (see ff-worker.js for deployment instructions).
+async function lookupFreeFireUsernameViaWorker(playerId) {
+  const workerUrl = process.env.FF_WORKER_URL;
+  if (!workerUrl) {
+    console.log('[FF Worker] FF_WORKER_URL not configured — cannot verify Free Fire accounts');
+    return { ok: null, error: 'FF_WORKER_URL not configured' };
+  }
   return new Promise((resolve) => {
-    // Try multiple regions — Cambodia players are usually on sg (Singapore)
-    const regions = ['sg', 'ind', 'id', 'th', 'vn', 'my'];
-    let tried = 0;
-    function tryRegion(region) {
-      const hostname = `${region}-freefire.fgamers.services`;
-      const reqPath  = `/player?uid=${encodeURIComponent(playerId)}`;
-      const req = https.request(
-        { hostname, path: reqPath, method: 'GET', timeout: 5000,
-          headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } },
-        (res) => {
-          let data = '';
-          res.on('data', c => { data += c; });
-          res.on('end', () => {
-            try {
-              const json = JSON.parse(data);
-              const name = (json && (json.basicInfo && json.basicInfo.nickname)) ||
-                           (json && json.nickname) || (json && json.name) || '';
-              if (name) { console.log('[FF Lookup] found username:', name, 'region:', region); return resolve(name); }
-            } catch (e) {}
-            tried++;
-            if (tried < regions.length) tryRegion(regions[tried]);
-            else { console.log('[FF Lookup] no username found for', playerId); resolve(''); }
-          });
-        }
-      );
-      req.on('error',   () => { tried++; if (tried < regions.length) tryRegion(regions[tried]); else resolve(''); });
-      req.on('timeout', () => { req.destroy(); tried++; if (tried < regions.length) tryRegion(regions[tried]); else resolve(''); });
-      req.end();
-    }
-    tryRegion(regions[0]);
+    const body         = JSON.stringify({ playerId: String(playerId) });
+    const workerSecret = process.env.FF_WORKER_SECRET || '';
+    let u;
+    try { u = new URL(workerUrl); } catch (e) { return resolve({ ok: null, error: 'Bad FF_WORKER_URL' }); }
+    const headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
+    if (workerSecret) headers['X-Worker-Secret'] = workerSecret;
+    const req = https.request(
+      { hostname: u.hostname, path: u.pathname, method: 'POST', headers, timeout: 8000 },
+      (res) => {
+        let data = '';
+        res.on('data', c => { data += c; });
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(data);
+            if (json.ok === true && json.username) resolve({ ok: true, username: json.username });
+            else resolve({ ok: false, message: json.message || 'Player ID មិនត្រឹមត្រូវ' });
+          } catch (e) { resolve({ ok: null, error: 'Parse error' }); }
+        });
+      }
+    );
+    req.on('error',   e  => resolve({ ok: null, error: e.message }));
+    req.on('timeout', () => { req.destroy(); resolve({ ok: null, error: 'FF Worker timeout' }); });
+    req.write(body); req.end();
   });
 }
 
@@ -350,26 +349,12 @@ async function validateGamePlayer(gameId, playerId, serverId) {
     const mgResult = await validatePlayerWithMooGold(MOOGOLD_PRODUCT_ID, playerId, serverId);
 
     if (mgResult.ok === true) {
-      // [CRITICAL FIX] MooGold's Free Fire validate (product 7847) does NOT
-      // actually check if the account exists — it returns status:true for
-      // ANY numeric ID, even fake ones like "123123123". Confirmed by testing:
-      // MooGold returned {"status":"true","username":null} for a made-up ID.
-      // So for Free Fire, MooGold's status:true is NOT proof of a real account —
-      // the ONLY real proof is a username successfully returned by fgamers.services.
-      // If that lookup fails, we must BLOCK, not unlock.
-      if (isFF) {
-        console.log('[Validate][FF] MooGold format-check passed — confirming real account via fgamers.services');
-        const username = await lookupFreeFireUsername(playerId);
-        if (username) {
-          console.log('[Validate][FF] SUCCESS — real account confirmed, username:', username);
-          return { ok: true, username };
-        }
-        console.log('[Validate][FF] BLOCKED — no real account found for playerId:', playerId);
-        return { ok: false, message: 'រកមិនឃើញគណនី Free Fire នេះទេ។ សូមពិនិត្យ Player ID ម្តងទៀត។' };
-      }
-
-      // MLBB / PUBG / HOK: MooGold's validate is a real account check —
-      // status:true is sufficient proof even if username is empty.
+      // [POLICY per Saem] Only MLBB shows a real username (via Moonton's
+      // API, which genuinely validates the account). Free Fire, PUBG, and
+      // HOK are Player-ID-only — MooGold's status:true is sufficient proof
+      // for these 3 games, same as before. No username is shown or required
+      // for FF/PUBG/HOK; the customer is responsible for entering the
+      // correct ID, same as any other reseller site.
       console.log('[Validate][MooGold] SUCCESS — game:', gid, '| username:', mgResult.username || '(none)');
       return { ok: true, username: mgResult.username || '' };
     }
@@ -978,9 +963,9 @@ async function handleValidatePlayer(req, res, query) {
   if (!playerId || !/^[0-9]{4,20}$/.test(playerId))
     return sendJSON(res, 400, { ok: false, message: 'Player ID មិនត្រឹមត្រូវ។' });
 
-  // MLBB + PUBG require Server/Zone ID; Free Fire + HOK do NOT.
-  const needsServer = !gameIdRaw || gameIdRaw === 'mlbb' || gameIdRaw.includes('mobile') ||
-                      gameIdRaw === 'pubg' || gameIdRaw === 'pubgm' || gameIdRaw.includes('pubg');
+  // [POLICY per Saem] Only MLBB requires Server/Zone ID.
+  // PUBG Mobile, Free Fire, and HOK are Player-ID-only.
+  const needsServer = !gameIdRaw || gameIdRaw === 'mlbb' || gameIdRaw.includes('mobile');
   if (needsServer && (!serverId || !/^[0-9]{1,6}$/.test(serverId)))
     return sendJSON(res, 400, { ok: false, message: 'Server ID / Zone ID មិនត្រឹមត្រូវ។' });
 
@@ -1748,9 +1733,9 @@ const server = http.createServer(async (req, res) => {
 //  Boot
 // ─────────────────────────────────────────────
 db.ensureDataFile();
-// [FIX] Enforce requiresServerId for all 4 games at boot time.
-//   MLBB + PUBG Mobile → true  (need Player ID + Zone/Server ID)
-//   Free Fire + HOK    → false (Player ID only)
+// [FIX per Saem] Only MLBB requires Server/Zone ID at boot time.
+//   MLBB                        → true  (Player ID + Zone ID)
+//   PUBG Mobile, Free Fire, HOK → false (Player ID only)
 try {
   const _d = db.readDB();
   let _changed = false;
@@ -1758,14 +1743,11 @@ try {
     const _id   = (g.id   || '').toLowerCase();
     const _name = (g.name || '').toLowerCase();
     const _isMlbb = _id === 'mlbb'  || _name.includes('mobile legend');
-    const _isPubg = _id === 'pubg'  || _id === 'pubgm' || _name.includes('pubg');
-    const _isFF   = _id === 'ff'    || _id === 'freefire' || _name.includes('free fire');
-    const _isHok  = _id === 'hok'   || _name.includes('honor of kings');
-    if ((_isMlbb || _isPubg) && !g.requiresServerId) {
+    if (_isMlbb && !g.requiresServerId) {
       g.requiresServerId = true; _changed = true;
       console.log('[Boot] requiresServerId=true for game:', g.id);
     }
-    if ((_isFF || _isHok) && g.requiresServerId) {
+    if (!_isMlbb && g.requiresServerId) {
       g.requiresServerId = false; _changed = true;
       console.log('[Boot] requiresServerId=false for game:', g.id);
     }
