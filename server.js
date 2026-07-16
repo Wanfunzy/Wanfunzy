@@ -151,7 +151,12 @@ async function fulfillWithMooGold(order) {
 
   const isMlbb = (order.gameId   || '').toLowerCase() === 'mlbb' ||
                  (order.gameName || '').toLowerCase().includes('mobile legend');
-  let gameRequiresServer = isMlbb;
+  // [FIX] PUBG Mobile also requires Zone ID — hardcode as safety net identical
+  // to MLBB above. DB lookup below confirms via requiresServerId flag, but if
+  // DB read fails we must NOT allow PUBG to slip through without serverId.
+  const isPubg = (order.gameId   || '').toLowerCase() === 'pubg' ||
+                 (order.gameName || '').toLowerCase().includes('pubg');
+  let gameRequiresServer = isMlbb || isPubg;
   try {
     const snap    = db.readDB();
     const gameDoc = snap.games && snap.games.find(g => g.id === order.gameId);
@@ -887,7 +892,15 @@ async function handleValidatePlayer(req, res, query) {
   const playerId = (query.playerId || '').trim();
   const serverId = (query.serverId || '').trim();
   if (!playerId || !/^[0-9]{4,20}$/.test(playerId)) return sendJSON(res, 400, { ok: false, message: 'Player ID មិនត្រឹមត្រូវ។' });
-  if (!serverId || !/^[0-9]{1,6}$/.test(serverId))  return sendJSON(res, 400, { ok: false, message: 'Server ID មិនត្រឹមត្រូវ។' });
+  // [FIX] This endpoint is currently called by MLBB only (client passes serverId always).
+  // MLBB + PUBG require Zone/Server ID; Free Fire + HOK do NOT.
+  // For MLBB validation we still require serverId — but validate format only if provided,
+  // so the endpoint stays usable if called for non-serverId games in the future.
+  if (serverId && !/^[0-9]{1,6}$/.test(serverId)) return sendJSON(res, 400, { ok: false, message: 'Server ID មិនត្រឹមត្រូវ។' });
+  // MLBB always requires serverId — reject if missing (MLBB-specific guard)
+  const _gameIdParam = (query.gameId || '').trim().toLowerCase();
+  const _isMlbbValidate = !_gameIdParam || _gameIdParam === 'mlbb';
+  if (_isMlbbValidate && (!serverId || !/^[0-9]{1,6}$/.test(serverId))) return sendJSON(res, 400, { ok: false, message: 'Server ID មិនត្រឹមត្រូវ។' });
   // [FIX] MooGold CS confirmed: use product ID 15145 (global region) for
   // validate — this is the correct ID and validation works with it.
   // 4700134 is a variation_id (specific package), not the product page ID.
@@ -1664,15 +1677,31 @@ const server = http.createServer(async (req, res) => {
 //  Boot
 // ─────────────────────────────────────────────
 db.ensureDataFile();
-// [FIX] Ensure MLBB always has requiresServerId=true in DB — this survives
-// even if a fresh volume mount resets in-memory assumptions.
+// [FIX] Ensure MLBB + PUBG Mobile always have requiresServerId=true in DB,
+// and Free Fire + HOK always have requiresServerId=false.
+// This survives even if a fresh volume mount resets in-memory assumptions.
+// Source of truth per game table:
+//   MLBB         → requiresServerId = true  (needs Player ID + Zone ID)
+//   PUBG Mobile  → requiresServerId = true  (needs Player ID + Server ID)
+//   Free Fire    → requiresServerId = false (Player ID only)
+//   HOK          → requiresServerId = false (Player ID only)
 try {
   const _d = db.readDB();
   let _changed = false;
   (_d.games || []).forEach(function(g) {
-    if ((g.id === 'mlbb' || (g.name || '').toLowerCase().includes('mobile legend')) && !g.requiresServerId) {
+    const _id   = (g.id   || '').toLowerCase();
+    const _name = (g.name || '').toLowerCase();
+    const _isMlbb = _id === 'mlbb'  || _name.includes('mobile legend');
+    const _isPubg = _id === 'pubg'  || _name.includes('pubg');
+    const _isFF   = _id === 'ff'    || _id === 'freefire' || _name.includes('free fire');
+    const _isHok  = _id === 'hok'   || _name.includes('honor of kings');
+    if ((_isMlbb || _isPubg) && !g.requiresServerId) {
       g.requiresServerId = true; _changed = true;
       console.log('[Boot] Set requiresServerId=true for game:', g.id);
+    }
+    if ((_isFF || _isHok) && g.requiresServerId) {
+      g.requiresServerId = false; _changed = true;
+      console.log('[Boot] Set requiresServerId=false for game:', g.id);
     }
   });
   if (_changed) db.writeDB(_d);
