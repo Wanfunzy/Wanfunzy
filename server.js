@@ -371,10 +371,17 @@ async function validateGamePlayer(gameId, playerId, serverId) {
     const mgResult = await validatePlayerWithMooGold(MOOGOLD_PRODUCT_ID, playerId, serverId);
 
     if (mgResult.ok === true) {
-      // Fallback path (Worker unavailable/not FF, or MLBB/PUBG/HOK).
-      // Return whatever username MooGold provides — for MLBB this is a
-      // genuine Moonton-verified name; for FF/PUBG/HOK it's best-effort
-      // only (MooGold does not truly validate these), shown if present.
+      // [CONFIRMED via production logs] MooGold's Free Fire validate
+      // (product 7847) always returns status:true with username:null,
+      // regardless of whether the Player ID is real or made up. It is
+      // NOT a real check for Free Fire. So for FF specifically, ok:true
+      // with no username must be treated as UNVERIFIED and blocked —
+      // never shown to the customer as a pass. MLBB/PUBG/HOK still trust
+      // MooGold's result as before.
+      if (isFF && !mgResult.username) {
+        console.log('[Validate][MooGold] FF returned no username — MooGold does not verify FF, blocking');
+        return { ok: false, message: 'មិនអាចផ្ទៀងផ្ទាត់ឈ្មោះក្នុងហ្គេម Free Fire បានទេនៅពេលនេះ។ សូមព្យាយាមម្តងទៀត ឬទាក់ទង admin។' };
+      }
       console.log('[Validate][MooGold] SUCCESS — game:', gid, '| username:', mgResult.username || '(none)');
       return { ok: true, username: mgResult.username || '' };
     }
