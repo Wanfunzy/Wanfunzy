@@ -227,9 +227,11 @@ async function validatePlayerWithMooGold(productId, playerId, serverId) {
   };
   try {
     const result = await moogoldRequest('product/validate', payload, payload);
-    console.log('[MooGold] validate:', JSON.stringify(result).slice(0, 200));
-    if (result && (result.status === true || result.status === 'true'))
-      return { ok: true, username: result.username || '', message: result.message || '' };
+    console.log('[MooGold] validate raw:', JSON.stringify(result).slice(0, 400));
+    if (result && (result.status === true || result.status === 'true')) {
+      const uname = (result.username) || (result.data && result.data.username) || '';
+      return { ok: true, username: uname, message: result.message || '' };
+    }
     const msg  = (result && (result.message || result.err_message)) || '';
     const code = (result && (result.code || result.err_code)) || '';
     const httpStatus = (result && result.data && result.data.status) || 0;
@@ -341,6 +343,26 @@ async function validateGamePlayer(gameId, playerId, serverId) {
     }
   }
 
+  // Free Fire Worker path — mirrors MLBB Worker exactly. MooGold's own
+  // Free Fire validate (product 7847) does NOT actually check if the
+  // account exists (accepts any numeric ID), so the Worker — which proxies
+  // Garena's real shop2game.com nickname lookup — is the only source of a
+  // genuine username for Free Fire. Falls back to MooGold below only if
+  // FF_WORKER_URL is unset or the Worker is unreachable.
+  if (isFF) {
+    const workerUrl = process.env.FF_WORKER_URL;
+    if (workerUrl) {
+      try {
+        const result = await lookupFreeFireUsernameViaWorker(playerId);
+        console.log('[Validate][FF Worker] result:', result.ok, result.username || result.message);
+        if (result.ok === true || result.ok === false) return result;
+        console.log('[Validate][FF Worker] unavailable:', result.error, '— falling back to MooGold');
+      } catch (e) { console.log('[Validate][FF Worker] threw:', e.message, '— falling back to MooGold'); }
+    } else {
+      console.log('[Validate][FF Worker] FF_WORKER_URL not set — falling back to MooGold (unreliable for FF)');
+    }
+  }
+
   // MooGold validate — confirm account exists for all 4 games
   const MOOGOLD_PRODUCT_ID = isPubg ? '6963' : isFF ? '7847' : isHok ? '5177311' : '15145';
   console.log('[Validate] game:', gid, '| productId:', MOOGOLD_PRODUCT_ID, '| playerId:', playerId, '| serverId:', serverId || '(none)');
@@ -349,12 +371,10 @@ async function validateGamePlayer(gameId, playerId, serverId) {
     const mgResult = await validatePlayerWithMooGold(MOOGOLD_PRODUCT_ID, playerId, serverId);
 
     if (mgResult.ok === true) {
-      // [POLICY per Saem] Only MLBB shows a real username (via Moonton's
-      // API, which genuinely validates the account). Free Fire, PUBG, and
-      // HOK are Player-ID-only — MooGold's status:true is sufficient proof
-      // for these 3 games, same as before. No username is shown or required
-      // for FF/PUBG/HOK; the customer is responsible for entering the
-      // correct ID, same as any other reseller site.
+      // Fallback path (Worker unavailable/not FF, or MLBB/PUBG/HOK).
+      // Return whatever username MooGold provides — for MLBB this is a
+      // genuine Moonton-verified name; for FF/PUBG/HOK it's best-effort
+      // only (MooGold does not truly validate these), shown if present.
       console.log('[Validate][MooGold] SUCCESS — game:', gid, '| username:', mgResult.username || '(none)');
       return { ok: true, username: mgResult.username || '' };
     }
