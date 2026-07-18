@@ -370,6 +370,23 @@ function renderAdminDashboard({ orders, packages, games, settings, filter, usern
 <input type="text" id="colorAccentHex" class="color-hex-input" value="${colors.accent}" />
 </div>
 </div>
+<h3 style="margin:18px 0 14px;font-size:15px;">Appearance — Package Card (Fill &amp; Stroke)</h3>
+<div class="color-field">
+<label>Fill (ពណ៌ Background កញ្ចប់) — ទុកទទេ = default</label>
+<div class="color-input-row">
+<input type="color" id="colorPkgFill" value="${colors.pkgFill || '#0b0e14'}" />
+<input type="text" id="colorPkgFillHex" class="color-hex-input" value="${colors.pkgFill || ''}" placeholder="default" />
+<button id="clearPkgFillBtn" type="button" class="btn btn-ghost btn-sm" title="Reset to default">✕</button>
+</div>
+</div>
+<div class="color-field">
+<label>Stroke (ពណ៌ស៊ុម) — ទុកទទេ = default</label>
+<div class="color-input-row">
+<input type="color" id="colorPkgStroke" value="${colors.pkgStroke || '#232733'}" />
+<input type="text" id="colorPkgStrokeHex" class="color-hex-input" value="${colors.pkgStroke || ''}" placeholder="default" />
+<button id="clearPkgStrokeBtn" type="button" class="btn btn-ghost btn-sm" title="Reset to default">✕</button>
+</div>
+</div>
 <button id="saveColorsBtn" class="btn btn-primary btn-sm" style="margin-top:8px;">រក្សាទុកពណ៌</button>
 </div>
 <div>
@@ -826,16 +843,28 @@ if (/^#[0-9A-Fa-f]{6}$/.test(hexInput.value)) colorInput.value = hexInput.value;
 linkColorPair('colorHeading', 'colorHeadingHex');
 linkColorPair('colorBody', 'colorBodyHex');
 linkColorPair('colorAccent', 'colorAccentHex');
+linkColorPair('colorPkgFill', 'colorPkgFillHex');
+linkColorPair('colorPkgStroke', 'colorPkgStrokeHex');
+const clearPkgFillBtn = document.getElementById('clearPkgFillBtn');
+if (clearPkgFillBtn) clearPkgFillBtn.addEventListener('click', function () {
+document.getElementById('colorPkgFillHex').value = '';
+});
+const clearPkgStrokeBtn = document.getElementById('clearPkgStrokeBtn');
+if (clearPkgStrokeBtn) clearPkgStrokeBtn.addEventListener('click', function () {
+document.getElementById('colorPkgStrokeHex').value = '';
+});
 const saveColorsBtn = document.getElementById('saveColorsBtn');
 if (saveColorsBtn) {
 saveColorsBtn.addEventListener('click', async function () {
 const heading = document.getElementById('colorHeadingHex').value;
 const body2 = document.getElementById('colorBodyHex').value;
 const accent = document.getElementById('colorAccentHex').value;
+const pkgFill = document.getElementById('colorPkgFillHex').value;
+const pkgStroke = document.getElementById('colorPkgStrokeHex').value;
 const res = await csrfFetch('/api/admin/settings/colors', {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ heading, body: body2, accent })
+body: JSON.stringify({ heading, body: body2, accent, pkgFill, pkgStroke })
 });
 const data = await res.json();
 if (data.ok) {
