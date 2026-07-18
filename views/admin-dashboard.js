@@ -388,6 +388,18 @@ function renderAdminDashboard({ orders, packages, games, settings, filter, usern
 </div>
 </div>
 <button id="saveColorsBtn" class="btn btn-primary btn-sm" style="margin-top:8px;">រក្សាទុកពណ៌</button>
+<h3 style="margin:18px 0 14px;font-size:15px;">Effects — Shooting Star Video (ស្រេចចិត្ត)</h3>
+<div class="upload-box upload-box-inline" data-upload-endpoint="/api/admin/settings/starfield-video" data-delete-endpoint="/api/admin/settings/starfield-video" data-allow-video="true" style="margin-bottom:0;">
+<div class="upload-box-label" style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Upload video ទេពច្យុត/meteor ផ្ទាល់ខ្លួន (ជំនួស animation CSS លំនាំដើម) — background ខ្មៅនឹងបាត់ដោយស្វ័យប្រវត្តិ ដូច្នេះគួរប្រើ video ដែលមាន background ខ្មៅសុទ្ធ</div>
+<div class="upload-box-body">
+  ${settings.starfieldVideo ? `<video src="/static/uploads/${settings.starfieldVideo}" class="upload-preview upload-preview-wide" style="height:60px;object-fit:cover;background:#000;" autoplay muted loop playsinline></video>` : `<div class="upload-preview upload-preview-empty upload-preview-wide" style="height:60px;">Default (CSS stars)</div>`}
+<div class="upload-box-actions">
+<label class="btn btn-ghost btn-sm" for="starfieldVideoInput" style="cursor:pointer;">${settings.starfieldVideo ? 'ប្តូរ video' : 'Upload Video'}</label>
+<input type="file" id="starfieldVideoInput" class="upload-input" accept="video/mp4,video/webm" style="display:none;" />
+  ${settings.starfieldVideo ? `<button class="btn btn-sm btn-danger upload-remove-btn">ត្រឡប់ទៅ Default</button>` : ''}
+</div>
+</div>
+</div>
 </div>
 <div>
             ${profileUploadBox}
