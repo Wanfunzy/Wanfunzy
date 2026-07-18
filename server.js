@@ -1388,7 +1388,7 @@ async function handleUpdateColors(req, res) {
   // Package card Fill/Stroke are optional — an empty string clears the
   // override back to the theme default, unlike heading/body/accent which
   // always require a valid hex value.
-  ['pkgFill', 'pkgStroke', 'pkgShadow', 'priceFill', 'priceStroke', 'priceShadow'].forEach(key => {
+  ['pkgFill', 'pkgStroke', 'pkgShadow', 'priceFill', 'priceStroke', 'priceShadow', 'frameFill', 'frameStroke', 'frameShadow'].forEach(key => {
     if (typeof body[key] === 'string') {
       if (body[key] === '') data.settings.colors[key] = null;
       else if (hexPattern.test(body[key])) data.settings.colors[key] = body[key];
