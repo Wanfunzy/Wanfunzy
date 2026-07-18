@@ -1527,6 +1527,30 @@ async function handleUploadPageBackgroundImage(req, res) {
   await _uploadImage(req, res, 'pageBackgroundImage', 'pagebg');
 }
 
+async function handleUploadStarfieldVideo(req, res) {
+  const session = getSession(req); if (!session) return sendJSON(res, 401, { ok: false, error: 'Unauthorized' });
+  if (!requireCsrf(req, res, session)) return;
+  try {
+    const data = db.readDB();
+    // Same size allowance as the card-background banner upload — a short
+    // looping meteor/shooting-star clip, not a static image.
+    const raw = await readBody(req, 30 * 1024 * 1024); const body = parseBody(req, raw);
+    const filename = db.saveUploadedImage(body.image, 'starfield', { allowVideo: true });
+    db.deleteUploadedImage(data.settings.starfieldVideo);
+    data.settings.starfieldVideo = filename;
+    db.writeDB(data); sendJSON(res, 200, { ok: true, filename });
+  } catch (err) { sendJSON(res, 400, { ok: false, error: err.message || 'Upload failed' }); }
+}
+
+async function handleDeleteStarfieldVideo(req, res) {
+  const session = getSession(req); if (!session) return sendJSON(res, 401, { ok: false, error: 'Unauthorized' });
+  if (!requireCsrf(req, res, session)) return;
+  const data = db.readDB();
+  db.deleteUploadedImage(data.settings.starfieldVideo);
+  data.settings.starfieldVideo = null;
+  db.writeDB(data); sendJSON(res, 200, { ok: true });
+}
+
 async function handleUploadCoverCarouselImage(req, res) {
   const session = getSession(req); if (!session) return sendJSON(res, 401, { ok: false, error: 'Unauthorized' });
   if (!requireCsrf(req, res, session)) return;
@@ -1766,6 +1790,8 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/admin/settings/social-links'          && method === 'POST')   return handleSetSocialLinks(req, res);
     if (pathname === '/api/admin/settings/page-background-image' && method === 'POST')   return handleUploadPageBackgroundImage(req, res);
     if (pathname === '/api/admin/settings/page-background-image' && method === 'DELETE') return handleRemoveCustomImage(req, res, { target: 'pagebackground' });
+    if (pathname === '/api/admin/settings/starfield-video' && method === 'POST')   return handleUploadStarfieldVideo(req, res);
+    if (pathname === '/api/admin/settings/starfield-video' && method === 'DELETE') return handleDeleteStarfieldVideo(req, res);
     m = pathname.match(/^\/api\/admin\/settings\/cover-carousel\/(\d+)$/);
     if (m && method === 'DELETE') return handleRemoveCoverCarouselImage(req, res, { index: m[1] });
     m = pathname.match(/^\/api\/admin\/settings\/social-icon\/([^/]+)$/);
