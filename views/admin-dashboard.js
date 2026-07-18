@@ -69,6 +69,7 @@ function renderPackageRow(pkg, packageIconImages) {
 <input type="number" class="pkg-bonus" value="${pkg.bonus}" min="0" placeholder="Bonus" />
 <input type="number" class="pkg-price" value="${pkg.price}" min="0" step="0.01" placeholder="Price USD" />
 <input type="text" class="pkg-moogold-id" value="${escapeHtml(String(pkg.moogoldProductId || ''))}" placeholder="MooGold ID" title="MooGold variation_id" style="width:110px;font-size:12px;" />
+<input type="text" class="pkg-badge" value="${escapeHtml(String(pkg.badge || ''))}" placeholder="Badge (ស្រេចចិត្ត)" title="Highlight ribbon shown on card, e.g. +5 ពិន្ទុ, ក្តៅ🔥" maxlength="20" style="width:110px;font-size:12px;" />
 <button class="toggle ${pkg.active ? 'on' : ''}" data-action="toggle-active" title="Active/Inactive"></button>
 <button class="btn btn-sm btn-danger" data-action="delete-package">លុប</button>
 </div>`;
@@ -131,7 +132,7 @@ function renderPackageGroup(game, title, categoryKey, groupPkgs, addButtonLabel,
 </div>
 <div class="order-panel" style="margin-top:0;padding:0;">
 <div class="pkg-row" style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.5px;">
-<div>ឈ្មោះ</div><div>Amount</div><div>Bonus</div><div>តម្លៃ (USD)</div><div>សកម្ម</div><div></div>
+<div>ឈ្មោះ</div><div>Amount</div><div>Bonus</div><div>តម្លៃ (USD)</div><div>Badge</div><div>សកម្ម</div><div></div>
 </div>
 <div class="package-list" data-game-id="${game.id}" data-category="${categoryKey}">${rowsHtml}</div>
 </div>
@@ -207,12 +208,12 @@ function renderGameSection(game, packages, gameLogos, cardBackgrounds, sectionIm
 </div>
 </div>
 <div class="upload-box upload-box-inline" data-upload-endpoint="/api/admin/settings/card-background/${game.id}" data-delete-endpoint="/api/admin/settings/card-background/${game.id}" style="margin-bottom:18px;">
-<div class="upload-box-label" style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Background Banner ទំព័រ Top-up</div>
+<div class="upload-box-label" style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Background Banner ទំព័រ Top-up (រូបភាព ឬ វីដេអូខ្លីៗ)</div>
 <div class="upload-box-body">
-  ${cardBgPreview ? `<img src="${cardBgPreview}" class="upload-preview upload-preview-wide" style="height:60px;" />` : `<div class="upload-preview upload-preview-empty upload-preview-wide" style="height:60px;">គ្មានរូបភាព</div>`}
+  ${cardBgPreview ? (/\.(mp4|webm)$/i.test(cardBgPreview) ? `<video src="${cardBgPreview}" class="upload-preview upload-preview-wide" style="height:60px;object-fit:cover;" autoplay muted loop playsinline></video>` : `<img src="${cardBgPreview}" class="upload-preview upload-preview-wide" style="height:60px;" />`) : `<div class="upload-preview upload-preview-empty upload-preview-wide" style="height:60px;">គ្មានរូបភាព</div>`}
 <div class="upload-box-actions">
-<label class="btn btn-ghost btn-sm" for="cardBgInput-${game.id}" style="cursor:pointer;">${cardBgPreview ? 'ប្តូររូបភាព' : 'Upload Background'}</label>
-<input type="file" id="cardBgInput-${game.id}" class="upload-input" accept="image/jpeg,image/png,image/webp" style="display:none;" />
+<label class="btn btn-ghost btn-sm" for="cardBgInput-${game.id}" style="cursor:pointer;">${cardBgPreview ? 'ប្តូររូបភាព/វីដេអូ' : 'Upload Background'}</label>
+<input type="file" id="cardBgInput-${game.id}" class="upload-input" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" style="display:none;" />
   ${cardBgPreview ? `<button class="btn btn-sm btn-danger upload-remove-btn">លុបរូបភាព</button>` : ''}
 </div>
 </div>
@@ -727,12 +728,14 @@ input.addEventListener('change', async function () {
 const row = input.closest('.pkg-row');
 const packageId = row.dataset.packageId;
 const moogoldEl = row.querySelector('.pkg-moogold-id');
+const badgeEl = row.querySelector('.pkg-badge');
 const payload = {
 name: row.querySelector('.pkg-name').value,
 amount: row.querySelector('.pkg-amount').value,
 bonus: row.querySelector('.pkg-bonus').value,
 price: row.querySelector('.pkg-price').value,
-moogoldProductId: moogoldEl ? moogoldEl.value.trim() || null : null
+moogoldProductId: moogoldEl ? moogoldEl.value.trim() || null : null,
+badge: badgeEl ? badgeEl.value.trim() || '' : ''
 };
 const res = await csrfFetch('/api/admin/packages/' + packageId, {
 method: 'PATCH',
