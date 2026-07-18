@@ -134,12 +134,15 @@ function buildSeedData() {
         pkgFill: null,   // optional global background color for package cards on /topup — falls back to the theme default if unset
         pkgStroke: null, // optional global border color for package cards on /topup — falls back to the theme default if unset
         pkgShadow: null, // optional global drop-shadow color for package cards
+        pkgShadowOpacity: null,   // 0-100, opacity of pkgShadow (defaults to 100 if unset)
         priceFill: null,   // optional text color for the price ("$1.75") on package cards
         priceStroke: null, // optional text outline color for the price
         priceShadow: null,  // optional text-shadow color for the price
+        priceShadowOpacity: null, // 0-100
         frameFill: null,   // optional background color behind the /topup banner frame
         frameStroke: null, // optional border color around the /topup banner frame
-        frameShadow: null  // optional drop-shadow color around the /topup banner frame
+        frameShadow: null,  // optional drop-shadow color around the /topup banner frame
+        frameShadowOpacity: null // 0-100
       },
       profileImage: null,  // filename inside public/uploads/, e.g. "profile.jpg"
       coverImage: null,    // filename inside public/uploads/, e.g. "cover.jpg" (legacy, kept for backward compat)
@@ -169,7 +172,8 @@ function buildSeedData() {
       gameLogos: {},       // { [gameId]: filename inside public/uploads/ }
       cardBackgrounds: {},  // { [gameId]: filename inside public/uploads/ } — optional single photo/video behind each package card on /topup
       cardBackgroundSlides: {}, // { [gameId]: [filenames] } — optional multi-image slideshow (max 8) shown instead of a single cardBackgrounds image when present
-      starfieldVideo: null  // optional admin-uploaded video (mp4/webm) shown as a shooting-star/meteor overlay on every page, in place of the built-in CSS animation
+      starfieldVideo: null,  // optional admin-uploaded video (mp4/webm) shown as a shooting-star/meteor overlay on every page, in place of the built-in CSS animation
+      coverVideo: null  // optional admin-uploaded video (mp4/webm) shown instead of the Cover Carousel on the landing page (/topup select screen)
     }
   };
 }
@@ -208,6 +212,10 @@ function readDB() {
   if (data.settings.colors.frameFill === undefined) data.settings.colors.frameFill = null;
   if (data.settings.colors.frameStroke === undefined) data.settings.colors.frameStroke = null;
   if (data.settings.colors.frameShadow === undefined) data.settings.colors.frameShadow = null;
+  if (data.settings.colors.pkgShadowOpacity === undefined) data.settings.colors.pkgShadowOpacity = null;
+  if (data.settings.colors.priceShadowOpacity === undefined) data.settings.colors.priceShadowOpacity = null;
+  if (data.settings.colors.frameShadowOpacity === undefined) data.settings.colors.frameShadowOpacity = null;
+  if (data.settings.coverVideo === undefined) data.settings.coverVideo = null;
   if (data.settings.gameLogos === undefined) {
     data.settings.gameLogos = {};
   }
