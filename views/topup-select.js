@@ -2,7 +2,7 @@
 // with full-frame logos, compact shared header (menu + language + social),
 // and a minimal "Top Up" heading.
 
-const { layout, ICONS, brandEffectCSS, renderSiteHeader, renderSiteFooter } = require('./layout');
+const { layout, ICONS, brandEffectCSS, renderSiteHeader, renderSiteFooter, hexToRgba } = require('./layout');
 const _i18n = require('./i18n');
 const t = (typeof _i18n.t === 'function') ? _i18n.t : function (l, key) { return key; };
 
@@ -38,6 +38,7 @@ function renderTopupSelect({ games, settings, lang = 'en' }) {
     : '/static/images/mascot.jpg';
   const coverImages = (settings && settings.coverImages) || [];
   const coverImage = settings && settings.coverImage ? settings.coverImage : null;
+  const coverVideo = settings && settings.coverVideo ? settings.coverVideo : null;
 
   // Same optional Fill/Stroke/Shadow "frame" override used on the per-game
   // /topup banner — reused here so admin only has ONE set of Frame color
@@ -45,7 +46,7 @@ function renderTopupSelect({ games, settings, lang = 'en' }) {
   // per-game banner consistently.
   const frameFillLine   = colors.frameFill   ? `--frame-fill: ${escapeHtml(colors.frameFill)};`     : '';
   const frameStrokeLine = colors.frameStroke ? `--frame-stroke: ${escapeHtml(colors.frameStroke)};` : '';
-  const frameShadowLine = colors.frameShadow ? `--frame-shadow: ${escapeHtml(colors.frameShadow)};` : '';
+  const frameShadowLine = colors.frameShadow ? `--frame-shadow: ${hexToRgba(colors.frameShadow, colors.frameShadowOpacity)};` : '';
 
   const customColorStyle = `
 <style>
@@ -63,18 +64,24 @@ ${frameShadowLine}
 
   const tilesHtml = activeGames.map((g) => renderGameCard(g, gameLogos[g.id])).join('\n');
 
-  const carouselHtml = coverImages.length
+  const carouselHtml = coverVideo
     ? `
+<div class="cover-carousel cover-carousel-video-wrap">
+<video class="cover-carousel-video" autoplay muted loop playsinline src="/static/uploads/${escapeHtml(coverVideo)}"></video>
+<div class="cover-carousel-video-overlay"></div>
+</div>`
+    : (coverImages.length
+      ? `
 <div class="cover-carousel" id="coverCarousel">
 ${coverImages.map((img, i) => `<div class="cover-slide${i === 0 ? ' active' : ''}" style="background-image: linear-gradient(180deg, rgba(11,14,20,0.35), rgba(11,14,20,0.85)), url('/static/uploads/${escapeHtml(img)}');"></div>`).join('\n')}
 ${coverImages.length > 1 ? `<div class="cover-dots">${coverImages.map((_, i) => `<span class="cover-dot${i === 0 ? ' active' : ''}" data-index="${i}"></span>`).join('')}</div>` : ''}
 </div>`
-    : (coverImage
-      ? `
+      : (coverImage
+        ? `
 <div class="cover-carousel">
 <div class="cover-slide active" style="background-image: linear-gradient(180deg, rgba(11,14,20,0.35), rgba(11,14,20,0.85)), url('/static/uploads/${escapeHtml(coverImage)}');"></div>
 </div>`
-      : '');
+        : ''));
 
   const body = `
 ${customColorStyle}
@@ -93,7 +100,7 @@ ${tilesHtml}
 </section>
 </main>
 ${renderSiteFooter({ profileImage, lang, t, settings })}
-${coverImages.length > 1 ? `
+${(!coverVideo && coverImages.length > 1) ? `
 <script>
 (function () {
 const slides = document.querySelectorAll('#coverCarousel .cover-slide');
