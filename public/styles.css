@@ -1909,8 +1909,8 @@ a.gem-card {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: var(--void);
-  border: 1px solid var(--line);
+  background: var(--pkg-fill, var(--void));
+  border: 1px solid var(--pkg-stroke, var(--line));
   border-radius: var(--radius-md);
   padding: 12px;
   cursor: pointer;
