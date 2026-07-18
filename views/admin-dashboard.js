@@ -252,6 +252,7 @@ function renderAdminDashboard({ orders, packages, games, settings, filter, usern
   const profileImage = settings && settings.profileImage ? `/static/uploads/${settings.profileImage}` : '/static/images/mascot.jpg';
   const coverImage = settings && settings.coverImage ? `/static/uploads/${settings.coverImage}` : null;
   const coverImages = (settings && settings.coverImages) || [];
+  const coverVideo = (settings && settings.coverVideo) || null;
   const brandNameEffect = (settings && settings.brandNameEffect) || 'none';
   const safetyBadgeEffect = (settings && settings.safetyBadgeEffect) || 'none';
   const brandTextAnimEnabled = !(settings && settings.brandTextAnimEnabled === false);
@@ -407,6 +408,11 @@ function renderAdminDashboard({ orders, packages, games, settings, filter, usern
 <input type="text" id="colorPkgShadowHex" class="color-hex-input" value="${colors.pkgShadow || ''}" placeholder="default" />
 <button id="clearPkgShadowBtn" type="button" class="btn btn-ghost btn-sm" title="Reset to default">✕</button>
 </div>
+<div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+<span style="font-size:11px;color:var(--text-dim);white-space:nowrap;">Opacity</span>
+<input type="range" id="opacityPkgShadow" min="0" max="100" value="${colors.pkgShadowOpacity !== null && colors.pkgShadowOpacity !== undefined ? colors.pkgShadowOpacity : 50}" style="flex:1;" />
+<span id="opacityPkgShadowVal" style="font-size:11px;color:var(--text-dim);width:32px;text-align:right;">${colors.pkgShadowOpacity !== null && colors.pkgShadowOpacity !== undefined ? colors.pkgShadowOpacity : 50}%</span>
+</div>
 </div>
 <h3 style="margin:18px 0 14px;font-size:15px;">Appearance — Price Text (Fill, Stroke &amp; Shadow)</h3>
 <div class="color-field">
@@ -432,6 +438,11 @@ function renderAdminDashboard({ orders, packages, games, settings, filter, usern
 <input type="text" id="colorPriceShadowHex" class="color-hex-input" value="${colors.priceShadow || ''}" placeholder="default" />
 <button id="clearPriceShadowBtn" type="button" class="btn btn-ghost btn-sm" title="Reset to default">✕</button>
 </div>
+<div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+<span style="font-size:11px;color:var(--text-dim);white-space:nowrap;">Opacity</span>
+<input type="range" id="opacityPriceShadow" min="0" max="100" value="${colors.priceShadowOpacity !== null && colors.priceShadowOpacity !== undefined ? colors.priceShadowOpacity : 50}" style="flex:1;" />
+<span id="opacityPriceShadowVal" style="font-size:11px;color:var(--text-dim);width:32px;text-align:right;">${colors.priceShadowOpacity !== null && colors.priceShadowOpacity !== undefined ? colors.priceShadowOpacity : 50}%</span>
+</div>
 </div>
 <h3 style="margin:18px 0 14px;font-size:15px;">Appearance — Banner Frame (Fill, Stroke &amp; Shadow) — /topup</h3>
 <div class="color-field">
@@ -456,6 +467,11 @@ function renderAdminDashboard({ orders, packages, games, settings, filter, usern
 <input type="color" id="colorFrameShadow" value="${colors.frameShadow || '#000000'}" />
 <input type="text" id="colorFrameShadowHex" class="color-hex-input" value="${colors.frameShadow || ''}" placeholder="default" />
 <button id="clearFrameShadowBtn" type="button" class="btn btn-ghost btn-sm" title="Reset to default">✕</button>
+</div>
+<div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+<span style="font-size:11px;color:var(--text-dim);white-space:nowrap;">Opacity</span>
+<input type="range" id="opacityFrameShadow" min="0" max="100" value="${colors.frameShadowOpacity !== null && colors.frameShadowOpacity !== undefined ? colors.frameShadowOpacity : 50}" style="flex:1;" />
+<span id="opacityFrameShadowVal" style="font-size:11px;color:var(--text-dim);width:32px;text-align:right;">${colors.frameShadowOpacity !== null && colors.frameShadowOpacity !== undefined ? colors.frameShadowOpacity : 50}%</span>
 </div>
 </div>
 <button id="saveColorsBtn" class="btn btn-primary btn-sm" style="margin-top:8px;">រក្សាទុកពណ៌</button>
@@ -616,6 +632,17 @@ ${iconPreview ? `<button class="btn btn-sm btn-danger upload-remove-btn">លុ�
 </div>
 <label class="btn btn-ghost btn-sm" for="carouselInput" style="cursor:pointer;">+ បន្ថែមរូបភាព (${coverImages.length}/8)</label>
 <input type="file" id="carouselInput" accept="image/jpeg,image/png,image/webp" style="display:none;" />
+</div>
+<div class="upload-box upload-box-inline" data-upload-endpoint="/api/admin/settings/cover-video" data-delete-endpoint="/api/admin/settings/cover-video" data-allow-video="true" style="margin-top:16px;">
+<div class="upload-box-label" style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">ជម្រើសផ្សេង — Cover Video (វីដេអូខ្លីៗ) — បើ upload ទុក នេះនឹងបង្ហាញជំនួស Cover Carousel ខាងលើទាំងស្រុង</div>
+<div class="upload-box-body">
+  ${coverVideo ? `<video src="/static/uploads/${coverVideo}" class="upload-preview upload-preview-wide" style="height:60px;object-fit:cover;background:#000;" autoplay muted loop playsinline></video>` : `<div class="upload-preview upload-preview-empty upload-preview-wide" style="height:60px;">គ្មាន Video (ប្រើ Carousel ខាងលើ)</div>`}
+<div class="upload-box-actions">
+<label class="btn btn-ghost btn-sm" for="coverVideoInput" style="cursor:pointer;">${coverVideo ? 'ប្តូរ Video' : 'Upload Video'}</label>
+<input type="file" id="coverVideoInput" class="upload-input" accept="video/mp4,video/webm" style="display:none;" />
+  ${coverVideo ? `<button class="btn btn-sm btn-danger upload-remove-btn">លុប Video (ត្រឡប់ទៅ Carousel)</button>` : ''}
+</div>
+</div>
 </div>
 </div>
 <div style="margin-top:48px;">
@@ -944,6 +971,15 @@ if (btn) btn.addEventListener('click', function () {
 document.getElementById('color' + name + 'Hex').value = '';
 });
 });
+// Opacity sliders (0-100) for each Shadow color — live-update the %
+// label next to the slider as it's dragged.
+['PkgShadow', 'PriceShadow', 'FrameShadow'].forEach(function (name) {
+var slider = document.getElementById('opacity' + name);
+var label = document.getElementById('opacity' + name + 'Val');
+if (slider && label) slider.addEventListener('input', function () {
+label.textContent = slider.value + '%';
+});
+});
 const saveColorsBtn = document.getElementById('saveColorsBtn');
 if (saveColorsBtn) {
 saveColorsBtn.addEventListener('click', async function () {
@@ -953,16 +989,19 @@ const accent = document.getElementById('colorAccentHex').value;
 const pkgFill = document.getElementById('colorPkgFillHex').value;
 const pkgStroke = document.getElementById('colorPkgStrokeHex').value;
 const pkgShadow = document.getElementById('colorPkgShadowHex').value;
+const pkgShadowOpacity = document.getElementById('opacityPkgShadow').value;
 const priceFill = document.getElementById('colorPriceFillHex').value;
 const priceStroke = document.getElementById('colorPriceStrokeHex').value;
 const priceShadow = document.getElementById('colorPriceShadowHex').value;
+const priceShadowOpacity = document.getElementById('opacityPriceShadow').value;
 const frameFill = document.getElementById('colorFrameFillHex').value;
 const frameStroke = document.getElementById('colorFrameStrokeHex').value;
 const frameShadow = document.getElementById('colorFrameShadowHex').value;
+const frameShadowOpacity = document.getElementById('opacityFrameShadow').value;
 const res = await csrfFetch('/api/admin/settings/colors', {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ heading, body: body2, accent, pkgFill, pkgStroke, pkgShadow, priceFill, priceStroke, priceShadow, frameFill, frameStroke, frameShadow })
+body: JSON.stringify({ heading, body: body2, accent, pkgFill, pkgStroke, pkgShadow, pkgShadowOpacity, priceFill, priceStroke, priceShadow, priceShadowOpacity, frameFill, frameStroke, frameShadow, frameShadowOpacity })
 });
 const data = await res.json();
 if (data.ok) {
