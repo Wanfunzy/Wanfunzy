@@ -37,7 +37,11 @@ function renderPkgCard(pkg, game, cardBgFilename) {
     else                         line1 = pkg.name;
     line2 = '';
   }
-  return `\n<button type="button" class="sp-pkg-card${isPureOrBonus ? ' sp-pkg-card-plain' : ''}" data-package-id="${pkg.id}" data-price="${pkg.price}" data-name="${escapeHtml(pkg.name)}">\n${iconHtml}\n<div class="sp-pkg-info">\n<div class="sp-pkg-name">${escapeHtml(line1)}</div>\n${line2 ? `<div class="sp-pkg-sub">${escapeHtml(line2)}</div>` : ''}\n</div>\n<div class="sp-pkg-price">$${pkg.price.toFixed(2)}</div>\n</button>`;
+  // Admin-editable highlight ribbon (e.g. "+5 ពិន្ទុ", "ក្តៅ🔥", "Best
+  // Value") — free text set per-package from the admin dashboard, shown
+  // pinned to the card's top-right corner.
+  const badgeHtml = pkg.badge ? `<div class="sp-pkg-badge">${escapeHtml(pkg.badge)}</div>` : '';
+  return `\n<button type="button" class="sp-pkg-card${isPureOrBonus ? ' sp-pkg-card-plain' : ''}" data-package-id="${pkg.id}" data-price="${pkg.price}" data-name="${escapeHtml(pkg.name)}">\n${badgeHtml}\n${iconHtml}\n<div class="sp-pkg-info">\n<div class="sp-pkg-name">${escapeHtml(line1)}</div>\n${line2 ? `<div class="sp-pkg-sub">${escapeHtml(line2)}</div>` : ''}\n</div>\n<div class="sp-pkg-price">$${pkg.price.toFixed(2)}</div>\n</button>`;
 }
 
 function renderTopupPackage({ game, packages, settings, lang = 'en', turnstileSiteKey = '', khqrAuto = false }) {
@@ -53,7 +57,12 @@ function renderTopupPackage({ game, packages, settings, lang = 'en', turnstileSi
   const customColorStyle = `\n<style>\n:root {\n--text: ${escapeHtml(colors.heading)};\n--text-dim: ${escapeHtml(colors.body)};\n--amber: ${escapeHtml(colors.accent)};\n}\n</style>` + brandEffectCSS(settings);
   const customLogo = gameLogos[game.id];
   const cardBg = cardBackgrounds[game.id];
-  const bannerHtml = cardBg ? `<div class="sp-game-banner" style="background-image: linear-gradient(180deg, rgba(11,14,20,0.15), rgba(11,14,20,0.9)), url('/static/uploads/${escapeHtml(cardBg)}');"></div>` : '';
+  const isVideoBg = cardBg && /\.(mp4|webm)$/i.test(cardBg);
+  const bannerHtml = cardBg
+    ? (isVideoBg
+        ? `<div class="sp-game-banner sp-game-banner-video-wrap"><video class="sp-game-banner-video" autoplay muted loop playsinline src="/static/uploads/${escapeHtml(cardBg)}"></video><div class="sp-game-banner-overlay"></div></div>`
+        : `<div class="sp-game-banner" style="background-image: linear-gradient(180deg, rgba(11,14,20,0.15), rgba(11,14,20,0.9)), url('/static/uploads/${escapeHtml(cardBg)}');"></div>`)
+    : '';
   const logoHtml = customLogo ? `<img src="/static/uploads/${escapeHtml(customLogo)}" alt="${escapeHtml(game.shortName)}" class="topup-header-logo" />` : `<div class="topup-header-logo topup-header-logo-empty">${ICONS.empty}</div>`;
   const isPassOrPack    = (p) => /pass|pack|value|twilight|weekly|super|limited/i.test(p.name);
   const isFirstTopup    = (p) => /first|1st/i.test(p.name) && !isPassOrPack(p);
