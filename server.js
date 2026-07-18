@@ -659,7 +659,8 @@ async function verifyTurnstile(token, ip) {
 const MIME = {
   '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon'
+  '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon',
+  '.mp4': 'video/mp4', '.webm': 'video/webm'
 };
 
 function serveStatic(req, res, pathname) {
@@ -668,10 +669,32 @@ function serveStatic(req, res, pathname) {
     const uploadsRoot = db.getUploadsDir();
     const filePath    = path.join(uploadsRoot, safePath.replace(/^uploads[/\\]/, ''));
     if (!filePath.startsWith(uploadsRoot)) return send(res, 403, 'Forbidden');
-    return fs.readFile(filePath, (err, content) => {
-      if (err) return send(res, 404, 'Not found');
-      res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
-      res.end(content);
+    return fs.stat(filePath, (statErr, stats) => {
+      if (statErr) return send(res, 404, 'Not found');
+      const mimeType = MIME[path.extname(filePath)] || 'application/octet-stream';
+      const range = req.headers.range;
+      // iOS Safari refuses to play <video> at all unless the server
+      // honors Range requests with a real 206 response — without this,
+      // video banners silently fail to play on iPhone even though the
+      // exact same file works fine in a desktop browser.
+      if (range) {
+        const bytesMatch = /^bytes=(\d*)-(\d*)$/.exec(range);
+        const start = bytesMatch && bytesMatch[1] ? parseInt(bytesMatch[1], 10) : 0;
+        const end   = bytesMatch && bytesMatch[2] ? parseInt(bytesMatch[2], 10) : stats.size - 1;
+        if (isNaN(start) || isNaN(end) || start > end || end >= stats.size) {
+          res.writeHead(416, { 'Content-Range': `bytes */${stats.size}` });
+          return res.end();
+        }
+        res.writeHead(206, {
+          'Content-Type': mimeType,
+          'Content-Length': (end - start + 1),
+          'Content-Range': `bytes ${start}-${end}/${stats.size}`,
+          'Accept-Ranges': 'bytes'
+        });
+        return fs.createReadStream(filePath, { start, end }).pipe(res);
+      }
+      res.writeHead(200, { 'Content-Type': mimeType, 'Content-Length': stats.size, 'Accept-Ranges': 'bytes' });
+      fs.createReadStream(filePath).pipe(res);
     });
   }
   const filePath = path.join(__dirname, 'public', safePath);
