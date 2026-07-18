@@ -1335,6 +1335,10 @@ async function handleUpdatePackage(req, res, params) {
   if (typeof body.active === 'string')  pkg.active = body.active === 'true';
   if (body.category !== undefined) pkg.category = VALID_CATEGORIES.includes(body.category) ? body.category : undefined;
   if (body.moogoldProductId !== undefined) { const mid = String(body.moogoldProductId || '').trim(); pkg.moogoldProductId = mid || null; }
+  // Admin-editable highlight ribbon shown on the storefront card (e.g.
+  // "+5 ពិន្ទុ", "ក្តៅ🔥", "Best Value"). Free text, capped short so it
+  // fits the ribbon without wrapping.
+  if (body.badge !== undefined) { const b = String(body.badge || '').trim().slice(0, 20); pkg.badge = b || null; }
   db.writeDB(data); sendJSON(res, 200, { ok: true, package: pkg });
 }
 
@@ -1520,8 +1524,10 @@ async function handleUploadCardBackground(req, res, params) {
   const data = db.readDB(); const game = data.games.find(g => g.id === params.gameId);
   if (!game) return sendJSON(res, 404, { ok: false, error: 'Game not found' });
   try {
-    const raw = await readBody(req, 8 * 1024 * 1024); const body = parseBody(req, raw);
-    const filename = db.saveUploadedImage(body.image, 'cardbg-' + game.id);
+    // Raised from the usual 8MB image cap — this endpoint also accepts a
+    // short video clip (up to 20MB binary), which is ~27MB once base64-encoded.
+    const raw = await readBody(req, 30 * 1024 * 1024); const body = parseBody(req, raw);
+    const filename = db.saveUploadedImage(body.image, 'cardbg-' + game.id, { allowVideo: true });
     if (!data.settings.cardBackgrounds) data.settings.cardBackgrounds = {};
     db.deleteUploadedImage(data.settings.cardBackgrounds[game.id]);
     data.settings.cardBackgrounds[game.id] = filename; db.writeDB(data); sendJSON(res, 200, { ok: true, filename });
