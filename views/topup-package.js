@@ -1,6 +1,6 @@
 // views/topup-package.js
 
-const { layout, ICONS, brandEffectCSS, renderSiteHeader, renderSiteFooter } = require('./layout');
+const { layout, ICONS, brandEffectCSS, renderSiteHeader, renderSiteFooter, hexToRgba } = require('./layout');
 const _i18n = require('./i18n');
 const t = (typeof _i18n.t === 'function') ? _i18n.t : function (l, key) { return key; };
 
@@ -57,13 +57,13 @@ function renderTopupPackage({ game, packages, settings, lang = 'en', turnstileSi
   const khqrMerchantName = (settings && settings.khqrMerchantName) || 'Wanfunzy';
   const pkgFillLine     = colors.pkgFill     ? `--pkg-fill: ${escapeHtml(colors.pkgFill)};`         : '';
   const pkgStrokeLine   = colors.pkgStroke   ? `--pkg-stroke: ${escapeHtml(colors.pkgStroke)};`     : '';
-  const pkgShadowLine   = colors.pkgShadow   ? `--pkg-shadow: ${escapeHtml(colors.pkgShadow)};`     : '';
+  const pkgShadowLine   = colors.pkgShadow   ? `--pkg-shadow: ${hexToRgba(colors.pkgShadow, colors.pkgShadowOpacity)};`     : '';
   const priceFillLine   = colors.priceFill   ? `--price-fill: ${escapeHtml(colors.priceFill)};`     : '';
   const priceStrokeLine = colors.priceStroke ? `--price-stroke: ${escapeHtml(colors.priceStroke)};` : '';
-  const priceShadowLine = colors.priceShadow ? `--price-shadow: ${escapeHtml(colors.priceShadow)};` : '';
+  const priceShadowLine = colors.priceShadow ? `--price-shadow: ${hexToRgba(colors.priceShadow, colors.priceShadowOpacity)};` : '';
   const frameFillLine   = colors.frameFill   ? `--frame-fill: ${escapeHtml(colors.frameFill)};`     : '';
   const frameStrokeLine = colors.frameStroke ? `--frame-stroke: ${escapeHtml(colors.frameStroke)};` : '';
-  const frameShadowLine = colors.frameShadow ? `--frame-shadow: ${escapeHtml(colors.frameShadow)};` : '';
+  const frameShadowLine = colors.frameShadow ? `--frame-shadow: ${hexToRgba(colors.frameShadow, colors.frameShadowOpacity)};` : '';
   const customColorStyle = `\n<style>\n:root {\n--text: ${escapeHtml(colors.heading)};\n--text-dim: ${escapeHtml(colors.body)};\n--amber: ${escapeHtml(colors.accent)};\n${pkgFillLine}\n${pkgStrokeLine}\n${pkgShadowLine}\n${priceFillLine}\n${priceStrokeLine}\n${priceShadowLine}\n${frameFillLine}\n${frameStrokeLine}\n${frameShadowLine}\n}\n</style>` + brandEffectCSS(settings);
   const customLogo = gameLogos[game.id];
   const cardBg = cardBackgrounds[game.id];
