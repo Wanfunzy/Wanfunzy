@@ -136,7 +136,10 @@ function buildSeedData() {
         pkgShadow: null, // optional global drop-shadow color for package cards
         priceFill: null,   // optional text color for the price ("$1.75") on package cards
         priceStroke: null, // optional text outline color for the price
-        priceShadow: null  // optional text-shadow color for the price
+        priceShadow: null,  // optional text-shadow color for the price
+        frameFill: null,   // optional background color behind the /topup banner frame
+        frameStroke: null, // optional border color around the /topup banner frame
+        frameShadow: null  // optional drop-shadow color around the /topup banner frame
       },
       profileImage: null,  // filename inside public/uploads/, e.g. "profile.jpg"
       coverImage: null,    // filename inside public/uploads/, e.g. "cover.jpg" (legacy, kept for backward compat)
@@ -202,6 +205,9 @@ function readDB() {
   if (data.settings.colors.priceFill === undefined) data.settings.colors.priceFill = null;
   if (data.settings.colors.priceStroke === undefined) data.settings.colors.priceStroke = null;
   if (data.settings.colors.priceShadow === undefined) data.settings.colors.priceShadow = null;
+  if (data.settings.colors.frameFill === undefined) data.settings.colors.frameFill = null;
+  if (data.settings.colors.frameStroke === undefined) data.settings.colors.frameStroke = null;
+  if (data.settings.colors.frameShadow === undefined) data.settings.colors.frameShadow = null;
   if (data.settings.gameLogos === undefined) {
     data.settings.gameLogos = {};
   }
