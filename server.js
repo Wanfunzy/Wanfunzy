@@ -1385,6 +1385,15 @@ async function handleUpdateColors(req, res) {
   const hexPattern = /^#[0-9A-Fa-f]{6}$/;
   const data = db.readDB();
   ['heading', 'body', 'accent'].forEach(key => { if (typeof body[key] === 'string' && hexPattern.test(body[key])) data.settings.colors[key] = body[key]; });
+  // Package card Fill/Stroke are optional — an empty string clears the
+  // override back to the theme default, unlike heading/body/accent which
+  // always require a valid hex value.
+  ['pkgFill', 'pkgStroke'].forEach(key => {
+    if (typeof body[key] === 'string') {
+      if (body[key] === '') data.settings.colors[key] = null;
+      else if (hexPattern.test(body[key])) data.settings.colors[key] = body[key];
+    }
+  });
   db.writeDB(data); sendJSON(res, 200, { ok: true, colors: data.settings.colors });
 }
 
