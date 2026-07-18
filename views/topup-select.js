@@ -39,12 +39,23 @@ function renderTopupSelect({ games, settings, lang = 'en' }) {
   const coverImages = (settings && settings.coverImages) || [];
   const coverImage = settings && settings.coverImage ? settings.coverImage : null;
 
+  // Same optional Fill/Stroke/Shadow "frame" override used on the per-game
+  // /topup banner — reused here so admin only has ONE set of Frame color
+  // controls that affects both the landing-page Cover Carousel and the
+  // per-game banner consistently.
+  const frameFillLine   = colors.frameFill   ? `--frame-fill: ${escapeHtml(colors.frameFill)};`     : '';
+  const frameStrokeLine = colors.frameStroke ? `--frame-stroke: ${escapeHtml(colors.frameStroke)};` : '';
+  const frameShadowLine = colors.frameShadow ? `--frame-shadow: ${escapeHtml(colors.frameShadow)};` : '';
+
   const customColorStyle = `
 <style>
 :root {
 --text: ${escapeHtml(colors.heading)};
 --text-dim: ${escapeHtml(colors.body)};
 --amber: ${escapeHtml(colors.accent)};
+${frameFillLine}
+${frameStrokeLine}
+${frameShadowLine}
 }
 </style>` + brandEffectCSS(settings);
 
