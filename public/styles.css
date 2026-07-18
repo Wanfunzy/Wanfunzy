@@ -150,6 +150,25 @@ a { color: inherit; text-decoration: none; }
   .sp-shooting-star { display: none; }
 }
 
+/* Admin-uploaded shooting-star/meteor video (Admin Dashboard → Effects),
+   shown instead of the CSS shooting stars above. mix-blend-mode: screen
+   makes black areas in the clip disappear, so only the bright streaks
+   show over the site's dark background — works with most stock "meteor
+   shower on black" clips without needing a transparent video format. */
+.sp-starfield-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  mix-blend-mode: screen;
+  opacity: 0.9;
+}
+
+.sp-starfield--custom .sp-shooting-star {
+  display: none;
+}
+
 img { max-width: 100%; display: block; }
 
 button, input, select, textarea {
