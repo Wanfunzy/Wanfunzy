@@ -90,8 +90,10 @@ function renderTopupPackage({ game, packages, settings, lang = 'en', turnstileSi
 
   const body = `
 ${customColorStyle}
+<div class="sp-hero">
 ${header}
 ${bannerHtml}
+</div>
 <main class="sp-main">
 <div class="wrap">
 <div class="topup-game-header" style="border-bottom:none;padding-bottom:16px;">
