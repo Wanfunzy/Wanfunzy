@@ -1394,6 +1394,14 @@ async function handleUpdateColors(req, res) {
       else if (hexPattern.test(body[key])) data.settings.colors[key] = body[key];
     }
   });
+  // Shadow opacity sliders (0-100) — each pairs with its Shadow color
+  // above to control how strong that shadow renders.
+  ['pkgShadowOpacity', 'priceShadowOpacity', 'frameShadowOpacity'].forEach(key => {
+    if (body[key] !== undefined && body[key] !== null && body[key] !== '') {
+      const n = parseInt(body[key], 10);
+      if (!isNaN(n)) data.settings.colors[key] = Math.max(0, Math.min(100, n));
+    }
+  });
   db.writeDB(data); sendJSON(res, 200, { ok: true, colors: data.settings.colors });
 }
 
@@ -1548,6 +1556,31 @@ async function handleDeleteStarfieldVideo(req, res) {
   const data = db.readDB();
   db.deleteUploadedImage(data.settings.starfieldVideo);
   data.settings.starfieldVideo = null;
+  db.writeDB(data); sendJSON(res, 200, { ok: true });
+}
+
+// Landing-page (/topup select screen) Cover Video — takes priority over
+// the Cover Carousel images when set. Same upload pattern as the
+// Starfield Video above.
+async function handleUploadCoverVideo(req, res) {
+  const session = getSession(req); if (!session) return sendJSON(res, 401, { ok: false, error: 'Unauthorized' });
+  if (!requireCsrf(req, res, session)) return;
+  try {
+    const data = db.readDB();
+    const raw = await readBody(req, 30 * 1024 * 1024); const body = parseBody(req, raw);
+    const filename = db.saveUploadedImage(body.image, 'covervideo', { allowVideo: true });
+    db.deleteUploadedImage(data.settings.coverVideo);
+    data.settings.coverVideo = filename;
+    db.writeDB(data); sendJSON(res, 200, { ok: true, filename });
+  } catch (err) { sendJSON(res, 400, { ok: false, error: err.message || 'Upload failed' }); }
+}
+
+async function handleDeleteCoverVideo(req, res) {
+  const session = getSession(req); if (!session) return sendJSON(res, 401, { ok: false, error: 'Unauthorized' });
+  if (!requireCsrf(req, res, session)) return;
+  const data = db.readDB();
+  db.deleteUploadedImage(data.settings.coverVideo);
+  data.settings.coverVideo = null;
   db.writeDB(data); sendJSON(res, 200, { ok: true });
 }
 
@@ -1830,6 +1863,8 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/admin/settings/page-background-image' && method === 'DELETE') return handleRemoveCustomImage(req, res, { target: 'pagebackground' });
     if (pathname === '/api/admin/settings/starfield-video' && method === 'POST')   return handleUploadStarfieldVideo(req, res);
     if (pathname === '/api/admin/settings/starfield-video' && method === 'DELETE') return handleDeleteStarfieldVideo(req, res);
+    if (pathname === '/api/admin/settings/cover-video' && method === 'POST')   return handleUploadCoverVideo(req, res);
+    if (pathname === '/api/admin/settings/cover-video' && method === 'DELETE') return handleDeleteCoverVideo(req, res);
     m = pathname.match(/^\/api\/admin\/settings\/cover-carousel\/(\d+)$/);
     if (m && method === 'DELETE') return handleRemoveCoverCarouselImage(req, res, { index: m[1] });
     m = pathname.match(/^\/api\/admin\/settings\/social-icon\/([^/]+)$/);
