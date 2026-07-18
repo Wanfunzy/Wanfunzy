@@ -396,4 +396,22 @@ ${hasKhqr ? `<div class="footer-accept">We accept: <span class="footer-khqr-badg
 </footer>`;
 }
 
-module.exports = { layout, ICONS, gameIcon, brandEffectCSS, renderSiteHeader, renderSiteFooter };
+// Converts a "#RRGGBB" hex color plus a 0-100 opacity percentage into an
+// rgba() string, e.g. hexToRgba('#000000', 50) -> 'rgba(0, 0, 0, 0.5)'.
+// Used by the optional Shadow color pickers (Package Card, Price Text,
+// Banner Frame) so admins get a real opacity slider instead of only a
+// flat color — box-shadow/text-shadow have no separate opacity property,
+// so the alpha has to be baked into the color itself.
+function hexToRgba(hex, opacityPct) {
+  if (!hex) return null;
+  const clean = String(hex).replace('#', '');
+  if (!/^[0-9A-Fa-f]{6}$/.test(clean)) return null;
+  const r = parseInt(clean.substring(0, 2), 16);
+  const g = parseInt(clean.substring(2, 4), 16);
+  const b = parseInt(clean.substring(4, 6), 16);
+  const pct = (opacityPct === undefined || opacityPct === null || opacityPct === '') ? 50 : Number(opacityPct);
+  const a = Math.max(0, Math.min(100, isNaN(pct) ? 50 : pct)) / 100;
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+
+module.exports = { layout, ICONS, gameIcon, brandEffectCSS, renderSiteHeader, renderSiteFooter, hexToRgba };
