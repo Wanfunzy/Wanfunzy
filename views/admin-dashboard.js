@@ -207,7 +207,7 @@ function renderGameSection(game, packages, gameLogos, cardBackgrounds, sectionIm
 </div>
 </div>
 </div>
-<div class="upload-box upload-box-inline" data-upload-endpoint="/api/admin/settings/card-background/${game.id}" data-delete-endpoint="/api/admin/settings/card-background/${game.id}" style="margin-bottom:18px;">
+<div class="upload-box upload-box-inline" data-upload-endpoint="/api/admin/settings/card-background/${game.id}" data-delete-endpoint="/api/admin/settings/card-background/${game.id}" data-allow-video="true" style="margin-bottom:18px;">
 <div class="upload-box-label" style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Background Banner ទំព័រ Top-up (រូបភាព ឬ វីដេអូខ្លីៗ)</div>
 <div class="upload-box-body">
   ${cardBgPreview ? (/\.(mp4|webm)$/i.test(cardBgPreview) ? `<video src="${cardBgPreview}" class="upload-preview upload-preview-wide" style="height:60px;object-fit:cover;" autoplay muted loop playsinline></video>` : `<img src="${cardBgPreview}" class="upload-preview upload-preview-wide" style="height:60px;" />`) : `<div class="upload-preview upload-preview-empty upload-preview-wide" style="height:60px;">គ្មានរូបភាព</div>`}
@@ -929,8 +929,14 @@ if (input) {
 input.addEventListener('change', async function () {
 const file = input.files[0];
 if (!file) return;
-if (file.size > 5 * 1024 * 1024) {
-toast('រូបភាពធំជាង 5MB — សូមជ្រើសរើសរូបតូចជាងនេះ', true);
+// Card-background upload accepts a short video clip (up to 20MB); every
+// other upload box stays image-only (5MB), same as before.
+const allowVideo = box.dataset.allowVideo === 'true';
+const maxBytes = allowVideo ? 20 * 1024 * 1024 : 5 * 1024 * 1024;
+if (file.size > maxBytes) {
+toast(allowVideo
+  ? 'ឯកសារធំជាង 20MB — សូម compress វីដេអូ ឬជ្រើសរើស file តូចជាងនេះ'
+  : 'រូបភាពធំជាង 5MB — សូមជ្រើសរើសរូបតូចជាងនេះ', true);
 return;
 }
 try {
