@@ -49,22 +49,52 @@ function renderTopupPackage({ game, packages, settings, lang = 'en', turnstileSi
   const colors = (settings && settings.colors) || { heading: '#F4F6FB', body: '#9AA3B8', accent: '#FFB84D' };
   const gameLogos = (settings && settings.gameLogos) || {};
   const cardBackgrounds = (settings && settings.cardBackgrounds) || {};
+  const cardBackgroundSlides = (settings && settings.cardBackgroundSlides) || {};
   const specialOfferImages = (settings && settings.specialOfferImages) || {};
   const packageImages = (settings && settings.packageImages) || {};
   const profileImage = settings && settings.profileImage ? `/static/uploads/${encodeURIComponent(settings.profileImage)}` : '/static/images/mascot.jpg';
   const khqrImage = (settings && settings.khqrImage) || null;
   const khqrMerchantName = (settings && settings.khqrMerchantName) || 'Wanfunzy';
-  const pkgFillLine   = colors.pkgFill   ? `--pkg-fill: ${escapeHtml(colors.pkgFill)};`     : '';
-  const pkgStrokeLine = colors.pkgStroke ? `--pkg-stroke: ${escapeHtml(colors.pkgStroke)};` : '';
-  const customColorStyle = `\n<style>\n:root {\n--text: ${escapeHtml(colors.heading)};\n--text-dim: ${escapeHtml(colors.body)};\n--amber: ${escapeHtml(colors.accent)};\n${pkgFillLine}\n${pkgStrokeLine}\n}\n</style>` + brandEffectCSS(settings);
+  const pkgFillLine     = colors.pkgFill     ? `--pkg-fill: ${escapeHtml(colors.pkgFill)};`         : '';
+  const pkgStrokeLine   = colors.pkgStroke   ? `--pkg-stroke: ${escapeHtml(colors.pkgStroke)};`     : '';
+  const pkgShadowLine   = colors.pkgShadow   ? `--pkg-shadow: ${escapeHtml(colors.pkgShadow)};`     : '';
+  const priceFillLine   = colors.priceFill   ? `--price-fill: ${escapeHtml(colors.priceFill)};`     : '';
+  const priceStrokeLine = colors.priceStroke ? `--price-stroke: ${escapeHtml(colors.priceStroke)};` : '';
+  const priceShadowLine = colors.priceShadow ? `--price-shadow: ${escapeHtml(colors.priceShadow)};` : '';
+  const customColorStyle = `\n<style>\n:root {\n--text: ${escapeHtml(colors.heading)};\n--text-dim: ${escapeHtml(colors.body)};\n--amber: ${escapeHtml(colors.accent)};\n${pkgFillLine}\n${pkgStrokeLine}\n${pkgShadowLine}\n${priceFillLine}\n${priceStrokeLine}\n${priceShadowLine}\n}\n</style>` + brandEffectCSS(settings);
   const customLogo = gameLogos[game.id];
   const cardBg = cardBackgrounds[game.id];
-  const isVideoBg = cardBg && /\.(mp4|webm)$/i.test(cardBg);
-  const bannerHtml = cardBg
-    ? (isVideoBg
-        ? `<div class="sp-game-banner sp-game-banner-video-wrap"><video class="sp-game-banner-video" autoplay muted loop playsinline src="/static/uploads/${escapeHtml(cardBg)}"></video><div class="sp-game-banner-overlay"></div></div>`
-        : `<div class="sp-game-banner" style="background-image: linear-gradient(180deg, rgba(11,14,20,0.15), rgba(11,14,20,0.9)), url('/static/uploads/${escapeHtml(cardBg)}');"></div>`)
-    : '';
+  const slides = (cardBackgroundSlides[game.id] || []).filter(Boolean);
+  let bannerHtml = '';
+  if (slides.length > 1) {
+    // Multi-image slideshow — CSS-only crossfade. Every slide shares one
+    // keyframe (visible for its 1/N slot, hidden the rest of the cycle);
+    // giving each slide a negative animation-delay offset by its index
+    // times the per-slide duration staggers them so exactly one is
+    // visible at a time, cycling in order, no JS required.
+    const perSlideSeconds = 4;
+    const fadeSeconds = 0.8;
+    const n = slides.length;
+    const cycleSeconds = perSlideSeconds * n;
+    const fadePct    = (fadeSeconds / cycleSeconds) * 100;
+    const visibleEnd = (100 / n) - fadePct;
+    const hiddenStart = 100 / n;
+    const slideDivs = slides.map((f, i) => `<div class="sp-hero-slide" style="background-image:url('/static/uploads/${escapeHtml(f)}'); animation-duration:${cycleSeconds}s; animation-delay:-${i * perSlideSeconds}s;"></div>`).join('\n');
+    bannerHtml = `<div class="sp-game-banner sp-game-banner-slideshow">
+<style>@keyframes sp-hero-slide-fade { 0% { opacity:1; } ${visibleEnd.toFixed(2)}% { opacity:1; } ${hiddenStart.toFixed(2)}% { opacity:0; } 100% { opacity:0; } }</style>
+${slideDivs}
+<div class="sp-game-banner-overlay"></div>
+</div>`;
+  } else {
+    const singleSlide = slides.length === 1 ? slides[0] : null;
+    const effectiveCardBg = singleSlide || cardBg;
+    const isVideoBg = effectiveCardBg && /\.(mp4|webm)$/i.test(effectiveCardBg);
+    bannerHtml = effectiveCardBg
+      ? (isVideoBg
+          ? `<div class="sp-game-banner sp-game-banner-video-wrap"><video class="sp-game-banner-video" autoplay muted loop playsinline src="/static/uploads/${escapeHtml(effectiveCardBg)}"></video><div class="sp-game-banner-overlay"></div></div>`
+          : `<div class="sp-game-banner" style="background-image: linear-gradient(180deg, rgba(11,14,20,0.15), rgba(11,14,20,0.9)), url('/static/uploads/${escapeHtml(effectiveCardBg)}');"></div>`)
+      : '';
+  }
   const logoHtml = customLogo ? `<img src="/static/uploads/${escapeHtml(customLogo)}" alt="${escapeHtml(game.shortName)}" class="topup-header-logo" />` : `<div class="topup-header-logo topup-header-logo-empty">${ICONS.empty}</div>`;
   const isPassOrPack    = (p) => /pass|pack|value|twilight|weekly|super|limited/i.test(p.name);
   const isFirstTopup    = (p) => /first|1st/i.test(p.name) && !isPassOrPack(p);
