@@ -1891,6 +1891,10 @@ a.gem-card {
   height: 400px;
   background-size: cover;
   background-position: center;
+  background-color: var(--frame-fill, transparent);
+  border: 2px solid var(--frame-stroke, transparent);
+  box-shadow: 0 6px 24px var(--frame-shadow, transparent);
+  box-sizing: border-box;
 }
 
 /* Hero section: header floats transparently on top of the banner instead
