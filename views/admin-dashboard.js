@@ -433,6 +433,31 @@ function renderAdminDashboard({ orders, packages, games, settings, filter, usern
 <button id="clearPriceShadowBtn" type="button" class="btn btn-ghost btn-sm" title="Reset to default">✕</button>
 </div>
 </div>
+<h3 style="margin:18px 0 14px;font-size:15px;">Appearance — Banner Frame (Fill, Stroke &amp; Shadow) — /topup</h3>
+<div class="color-field">
+<label>Fill (ពណ៌ Background ក្រោយ Frame) — ទុកទទេ = default</label>
+<div class="color-input-row">
+<input type="color" id="colorFrameFill" value="${colors.frameFill || '#0b0e14'}" />
+<input type="text" id="colorFrameFillHex" class="color-hex-input" value="${colors.frameFill || ''}" placeholder="default" />
+<button id="clearFrameFillBtn" type="button" class="btn btn-ghost btn-sm" title="Reset to default">✕</button>
+</div>
+</div>
+<div class="color-field">
+<label>Stroke (ស៊ុម Frame) — ទុកទទេ = default</label>
+<div class="color-input-row">
+<input type="color" id="colorFrameStroke" value="${colors.frameStroke || '#FFB84D'}" />
+<input type="text" id="colorFrameStrokeHex" class="color-hex-input" value="${colors.frameStroke || ''}" placeholder="default" />
+<button id="clearFrameStrokeBtn" type="button" class="btn btn-ghost btn-sm" title="Reset to default">✕</button>
+</div>
+</div>
+<div class="color-field">
+<label>Shadow (ស្រមោល Frame) — ទុកទទេ = default</label>
+<div class="color-input-row">
+<input type="color" id="colorFrameShadow" value="${colors.frameShadow || '#000000'}" />
+<input type="text" id="colorFrameShadowHex" class="color-hex-input" value="${colors.frameShadow || ''}" placeholder="default" />
+<button id="clearFrameShadowBtn" type="button" class="btn btn-ghost btn-sm" title="Reset to default">✕</button>
+</div>
+</div>
 <button id="saveColorsBtn" class="btn btn-primary btn-sm" style="margin-top:8px;">រក្សាទុកពណ៌</button>
 <h3 style="margin:18px 0 14px;font-size:15px;">Effects — Shooting Star Video (ស្រេចចិត្ត)</h3>
 <div class="upload-box upload-box-inline" data-upload-endpoint="/api/admin/settings/starfield-video" data-delete-endpoint="/api/admin/settings/starfield-video" data-allow-video="true" style="margin-bottom:0;">
@@ -907,10 +932,13 @@ linkColorPair('colorPkgShadow', 'colorPkgShadowHex');
 linkColorPair('colorPriceFill', 'colorPriceFillHex');
 linkColorPair('colorPriceStroke', 'colorPriceStrokeHex');
 linkColorPair('colorPriceShadow', 'colorPriceShadowHex');
+linkColorPair('colorFrameFill', 'colorFrameFillHex');
+linkColorPair('colorFrameStroke', 'colorFrameStrokeHex');
+linkColorPair('colorFrameShadow', 'colorFrameShadowHex');
 // Each optional color field has a "✕ reset to default" button that just
 // clears its hex input — an empty value tells the server to drop the
 // override back to the theme default.
-['PkgFill', 'PkgStroke', 'PkgShadow', 'PriceFill', 'PriceStroke', 'PriceShadow'].forEach(function (name) {
+['PkgFill', 'PkgStroke', 'PkgShadow', 'PriceFill', 'PriceStroke', 'PriceShadow', 'FrameFill', 'FrameStroke', 'FrameShadow'].forEach(function (name) {
 var btn = document.getElementById('clear' + name + 'Btn');
 if (btn) btn.addEventListener('click', function () {
 document.getElementById('color' + name + 'Hex').value = '';
@@ -928,10 +956,13 @@ const pkgShadow = document.getElementById('colorPkgShadowHex').value;
 const priceFill = document.getElementById('colorPriceFillHex').value;
 const priceStroke = document.getElementById('colorPriceStrokeHex').value;
 const priceShadow = document.getElementById('colorPriceShadowHex').value;
+const frameFill = document.getElementById('colorFrameFillHex').value;
+const frameStroke = document.getElementById('colorFrameStrokeHex').value;
+const frameShadow = document.getElementById('colorFrameShadowHex').value;
 const res = await csrfFetch('/api/admin/settings/colors', {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ heading, body: body2, accent, pkgFill, pkgStroke, pkgShadow, priceFill, priceStroke, priceShadow })
+body: JSON.stringify({ heading, body: body2, accent, pkgFill, pkgStroke, pkgShadow, priceFill, priceStroke, priceShadow, frameFill, frameStroke, frameShadow })
 });
 const data = await res.json();
 if (data.ok) {
