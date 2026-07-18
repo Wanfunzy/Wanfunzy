@@ -1174,6 +1174,17 @@ button, input, select, textarea {
   padding-bottom: 32px;
   border-bottom: 1px solid var(--line-soft);
   margin-bottom: 8px;
+  /* Pulled up to sit over the banner's bottom edge (which is already
+     darkened by its own gradient overlay for legibility) instead of
+     starting fresh on the solid page background below it. */
+  position: relative;
+  z-index: 5;
+  margin-top: -96px;
+  padding-top: 12px;
+}
+
+@media (max-width: 640px) {
+  .topup-game-header { margin-top: -84px; }
 }
 
 .topup-header-logo {
@@ -1770,7 +1781,7 @@ a.gem-card {
 
 .sp-game-banner {
   width: 100%;
-  height: 200px;
+  height: 320px;
   background-size: cover;
   background-position: center;
 }
@@ -2066,7 +2077,7 @@ a.gem-card {
 
 @media (max-width: 480px) {
   .sp-panel { padding: 16px; }
-  .sp-game-banner { height: 140px; }
+  .sp-game-banner { height: 260px; }
   .sp-pkg-name { font-size: 12px; }
   .sp-pkg-price { font-size: 12px; }
   .sp-buy-btn { padding: 12px 20px; font-size: 14px; }
