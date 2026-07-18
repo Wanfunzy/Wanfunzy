@@ -159,12 +159,13 @@ function renderUploadBox({ label, hint, previewSrc, uploadEndpoint, deleteEndpoi
 </div>`;
 }
 
-function renderGameSection(game, packages, gameLogos, cardBackgrounds, sectionImages, packageIconImages) {
+function renderGameSection(game, packages, gameLogos, cardBackgrounds, sectionImages, packageIconImages, cardBackgroundSlides) {
   const gamePackages = packages.filter((p) => p.gameId === game.id);
   const customLogo = gameLogos[game.id];
   const logoPreview = customLogo ? `/static/uploads/${customLogo}` : null;
   const customCardBg = (cardBackgrounds || {})[game.id];
   const cardBgPreview = customCardBg ? `/static/uploads/${customCardBg}` : null;
+  const slides = ((cardBackgroundSlides || {})[game.id] || []);
   const secImgs = (sectionImages || {})[game.id] || {};
 
   function renderSectionBox(sectionKey, sectionLabel) {
@@ -208,7 +209,7 @@ function renderGameSection(game, packages, gameLogos, cardBackgrounds, sectionIm
 </div>
 </div>
 <div class="upload-box upload-box-inline" data-upload-endpoint="/api/admin/settings/card-background/${game.id}" data-delete-endpoint="/api/admin/settings/card-background/${game.id}" data-allow-video="true" style="margin-bottom:18px;">
-<div class="upload-box-label" style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Background Banner ទំព័រ Top-up (រូបភាព ឬ វីដេអូខ្លីៗ)</div>
+<div class="upload-box-label" style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Background Banner ទំព័រ Top-up (រូបភាព ឬ វីដេអូខ្លីៗ) — ប្រើតែពេលមិនមាន Slideshow ខាងក្រោម</div>
 <div class="upload-box-body">
   ${cardBgPreview ? (/\.(mp4|webm)$/i.test(cardBgPreview) ? `<video src="${cardBgPreview}" class="upload-preview upload-preview-wide" style="height:60px;object-fit:cover;" autoplay muted loop playsinline></video>` : `<img src="${cardBgPreview}" class="upload-preview upload-preview-wide" style="height:60px;" />`) : `<div class="upload-preview upload-preview-empty upload-preview-wide" style="height:60px;">គ្មានរូបភាព</div>`}
 <div class="upload-box-actions">
@@ -217,6 +218,18 @@ function renderGameSection(game, packages, gameLogos, cardBackgrounds, sectionIm
   ${cardBgPreview ? `<button class="btn btn-sm btn-danger upload-remove-btn">លុបរូបភាព</button>` : ''}
 </div>
 </div>
+</div>
+<div style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:18px;">
+<div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;font-weight:600;">Banner Slideshow (រូបភាពច្រើនសន្លឹក, អតិបរមា 8) — បើមាន ២ រូបឡើងទៅ នឹងបង្ហាញជា Slideshow ស្វ័យប្រវត្តិ ជំនួស Background Banner ខាងលើ</div>
+<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+${slides.map((f, i) => `
+<div style="position:relative;">
+<img src="/static/uploads/${f}" style="width:70px;height:50px;object-fit:cover;border-radius:6px;border:1px solid var(--line);" />
+<button class="btn btn-sm btn-danger card-slide-remove-btn" data-game-id="${game.id}" data-index="${i}" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;padding:0;line-height:20px;border-radius:50%;font-size:11px;">✕</button>
+</div>`).join('')}
+</div>
+<label class="btn btn-ghost btn-sm card-slide-add-label" for="cardSlideInput-${game.id}" style="cursor:pointer;${slides.length >= 8 ? 'opacity:0.5;pointer-events:none;' : ''}">+ បន្ថែមរូបភាព (${slides.length}/8)</label>
+<input type="file" id="cardSlideInput-${game.id}" class="card-slide-input" data-game-id="${game.id}" accept="image/jpeg,image/png,image/webp" style="display:none;" />
 </div>
 <div style="font-size:12px;color:var(--text-dim);font-weight:700;margin:16px 0 10px;">រូបភាព ដាច់ដោយឡែក សម្រាប់ ៤ ផ្នែក (Section Image):</div>
 ${renderSectionBox('passes',       'Special Passes & Packs')}
@@ -300,7 +313,7 @@ function renderAdminDashboard({ orders, packages, games, settings, filter, usern
 <p>${isDeletedView ? 'គ្មាន orders ដែលបានលុបទេ' : 'មិនទាន់មាន Order ទេនៅពេលនេះ'}</p>
 </div>`;
 
-  const gameSectionsHtml = games.map((g) => renderGameSection(g, packages, gameLogos, cardBackgrounds, sectionImages, packageIconImages)).join('');
+  const gameSectionsHtml = games.map((g) => renderGameSection(g, packages, gameLogos, cardBackgrounds, sectionImages, packageIconImages, settings.cardBackgroundSlides)).join('');
 
   const profileUploadBox = renderUploadBox({
     label: 'Profile Picture (Logo)',
@@ -385,6 +398,39 @@ function renderAdminDashboard({ orders, packages, games, settings, filter, usern
 <input type="color" id="colorPkgStroke" value="${colors.pkgStroke || '#232733'}" />
 <input type="text" id="colorPkgStrokeHex" class="color-hex-input" value="${colors.pkgStroke || ''}" placeholder="default" />
 <button id="clearPkgStrokeBtn" type="button" class="btn btn-ghost btn-sm" title="Reset to default">✕</button>
+</div>
+</div>
+<div class="color-field">
+<label>Shadow (ស្រមោលកញ្ចប់) — ទុកទទេ = default</label>
+<div class="color-input-row">
+<input type="color" id="colorPkgShadow" value="${colors.pkgShadow || '#000000'}" />
+<input type="text" id="colorPkgShadowHex" class="color-hex-input" value="${colors.pkgShadow || ''}" placeholder="default" />
+<button id="clearPkgShadowBtn" type="button" class="btn btn-ghost btn-sm" title="Reset to default">✕</button>
+</div>
+</div>
+<h3 style="margin:18px 0 14px;font-size:15px;">Appearance — Price Text (Fill, Stroke &amp; Shadow)</h3>
+<div class="color-field">
+<label>Fill (ពណ៌អក្សរតម្លៃ) — ទុកទទេ = default</label>
+<div class="color-input-row">
+<input type="color" id="colorPriceFill" value="${colors.priceFill || '#FFB84D'}" />
+<input type="text" id="colorPriceFillHex" class="color-hex-input" value="${colors.priceFill || ''}" placeholder="default" />
+<button id="clearPriceFillBtn" type="button" class="btn btn-ghost btn-sm" title="Reset to default">✕</button>
+</div>
+</div>
+<div class="color-field">
+<label>Stroke (ស៊ុមអក្សរ) — ទុកទទេ = default</label>
+<div class="color-input-row">
+<input type="color" id="colorPriceStroke" value="${colors.priceStroke || '#000000'}" />
+<input type="text" id="colorPriceStrokeHex" class="color-hex-input" value="${colors.priceStroke || ''}" placeholder="default" />
+<button id="clearPriceStrokeBtn" type="button" class="btn btn-ghost btn-sm" title="Reset to default">✕</button>
+</div>
+</div>
+<div class="color-field">
+<label>Shadow (ស្រមោលអក្សរ) — ទុកទទេ = default</label>
+<div class="color-input-row">
+<input type="color" id="colorPriceShadow" value="${colors.priceShadow || '#000000'}" />
+<input type="text" id="colorPriceShadowHex" class="color-hex-input" value="${colors.priceShadow || ''}" placeholder="default" />
+<button id="clearPriceShadowBtn" type="button" class="btn btn-ghost btn-sm" title="Reset to default">✕</button>
 </div>
 </div>
 <button id="saveColorsBtn" class="btn btn-primary btn-sm" style="margin-top:8px;">រក្សាទុកពណ៌</button>
@@ -857,13 +903,18 @@ linkColorPair('colorBody', 'colorBodyHex');
 linkColorPair('colorAccent', 'colorAccentHex');
 linkColorPair('colorPkgFill', 'colorPkgFillHex');
 linkColorPair('colorPkgStroke', 'colorPkgStrokeHex');
-const clearPkgFillBtn = document.getElementById('clearPkgFillBtn');
-if (clearPkgFillBtn) clearPkgFillBtn.addEventListener('click', function () {
-document.getElementById('colorPkgFillHex').value = '';
+linkColorPair('colorPkgShadow', 'colorPkgShadowHex');
+linkColorPair('colorPriceFill', 'colorPriceFillHex');
+linkColorPair('colorPriceStroke', 'colorPriceStrokeHex');
+linkColorPair('colorPriceShadow', 'colorPriceShadowHex');
+// Each optional color field has a "✕ reset to default" button that just
+// clears its hex input — an empty value tells the server to drop the
+// override back to the theme default.
+['PkgFill', 'PkgStroke', 'PkgShadow', 'PriceFill', 'PriceStroke', 'PriceShadow'].forEach(function (name) {
+var btn = document.getElementById('clear' + name + 'Btn');
+if (btn) btn.addEventListener('click', function () {
+document.getElementById('color' + name + 'Hex').value = '';
 });
-const clearPkgStrokeBtn = document.getElementById('clearPkgStrokeBtn');
-if (clearPkgStrokeBtn) clearPkgStrokeBtn.addEventListener('click', function () {
-document.getElementById('colorPkgStrokeHex').value = '';
 });
 const saveColorsBtn = document.getElementById('saveColorsBtn');
 if (saveColorsBtn) {
@@ -873,10 +924,14 @@ const body2 = document.getElementById('colorBodyHex').value;
 const accent = document.getElementById('colorAccentHex').value;
 const pkgFill = document.getElementById('colorPkgFillHex').value;
 const pkgStroke = document.getElementById('colorPkgStrokeHex').value;
+const pkgShadow = document.getElementById('colorPkgShadowHex').value;
+const priceFill = document.getElementById('colorPriceFillHex').value;
+const priceStroke = document.getElementById('colorPriceStrokeHex').value;
+const priceShadow = document.getElementById('colorPriceShadowHex').value;
 const res = await csrfFetch('/api/admin/settings/colors', {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ heading, body: body2, accent, pkgFill, pkgStroke })
+body: JSON.stringify({ heading, body: body2, accent, pkgFill, pkgStroke, pkgShadow, priceFill, priceStroke, priceShadow })
 });
 const data = await res.json();
 if (data.ok) {
@@ -1047,6 +1102,48 @@ btn.addEventListener('click', async function () {
 const index = btn.dataset.index;
 if (!confirm('លុបរូបភាពនេះចេញពី Carousel មែនទេ?')) return;
 const res = await csrfFetch('/api/admin/settings/cover-carousel/' + index, { method: 'DELETE' });
+const data = await res.json();
+if (data.ok) {
+toast('បានលុបរូបភាព ✓');
+setTimeout(() => location.reload(), 600);
+}
+});
+});
+// ---------- Per-game Banner Slideshow (multi-image, max 8) ----------
+document.querySelectorAll('.card-slide-input').forEach(function (input) {
+input.addEventListener('change', async function () {
+const file = input.files[0];
+if (!file) return;
+if (file.size > 5 * 1024 * 1024) {
+toast('រូបភាពធំជាង 5MB — សូមជ្រើសរើសរូបតូចជាងនេះ', true);
+return;
+}
+const gameId = input.dataset.gameId;
+try {
+const dataUrl = await fileToDataUrl(file);
+const res = await csrfFetch('/api/admin/settings/card-slides/' + gameId, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ image: dataUrl })
+});
+const data = await res.json();
+if (data.ok) {
+toast('បានបន្ថែមរូបភាព ✓');
+setTimeout(() => location.reload(), 600);
+} else {
+toast(data.error || 'Upload បរាជ័យ', true);
+}
+} catch (err) {
+toast('មានបញ្ហាកើតឡើងពេល Upload', true);
+}
+});
+});
+document.querySelectorAll('.card-slide-remove-btn').forEach(function (btn) {
+btn.addEventListener('click', async function () {
+const gameId = btn.dataset.gameId;
+const index = btn.dataset.index;
+if (!confirm('លុបរូបភាពនេះចេញពី Slideshow មែនទេ?')) return;
+const res = await csrfFetch('/api/admin/settings/card-slides/' + gameId + '/' + index, { method: 'DELETE' });
 const data = await res.json();
 if (data.ok) {
 toast('បានលុបរូបភាព ✓');
