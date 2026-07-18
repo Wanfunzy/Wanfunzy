@@ -130,7 +130,9 @@ function buildSeedData() {
       colors: {
         heading: '#F4F6FB',
         body: '#9AA3B8',
-        accent: '#FFB84D'
+        accent: '#FFB84D',
+        pkgFill: null,   // optional global background color for package cards on /topup — falls back to the theme default if unset
+        pkgStroke: null  // optional global border color for package cards on /topup — falls back to the theme default if unset
       },
       profileImage: null,  // filename inside public/uploads/, e.g. "profile.jpg"
       coverImage: null,    // filename inside public/uploads/, e.g. "cover.jpg" (legacy, kept for backward compat)
@@ -158,7 +160,8 @@ function buildSeedData() {
         tiktok: null
       },
       gameLogos: {},       // { [gameId]: filename inside public/uploads/ }
-      cardBackgrounds: {}  // { [gameId]: filename inside public/uploads/ } — optional photo behind each package card on /topup
+      cardBackgrounds: {},  // { [gameId]: filename inside public/uploads/ } — optional photo behind each package card on /topup
+      starfieldVideo: null  // optional admin-uploaded video (mp4/webm) shown as a shooting-star/meteor overlay on every page, in place of the built-in CSS animation
     }
   };
 }
@@ -186,13 +189,18 @@ function readDB() {
     };
   }
   if (!data.settings.colors) {
-    data.settings.colors = { heading: '#F4F6FB', body: '#9AA3B8', accent: '#FFB84D' };
+    data.settings.colors = { heading: '#F4F6FB', body: '#9AA3B8', accent: '#FFB84D', pkgFill: null, pkgStroke: null };
   }
+  if (data.settings.colors.pkgFill === undefined) data.settings.colors.pkgFill = null;
+  if (data.settings.colors.pkgStroke === undefined) data.settings.colors.pkgStroke = null;
   if (data.settings.gameLogos === undefined) {
     data.settings.gameLogos = {};
   }
   if (data.settings.cardBackgrounds === undefined) {
     data.settings.cardBackgrounds = {};
+  }
+  if (data.settings.starfieldVideo === undefined) {
+    data.settings.starfieldVideo = null;
   }
   if (data.settings.sectionImages === undefined) {
     data.settings.sectionImages = {};
