@@ -132,7 +132,11 @@ function buildSeedData() {
         body: '#9AA3B8',
         accent: '#FFB84D',
         pkgFill: null,   // optional global background color for package cards on /topup — falls back to the theme default if unset
-        pkgStroke: null  // optional global border color for package cards on /topup — falls back to the theme default if unset
+        pkgStroke: null, // optional global border color for package cards on /topup — falls back to the theme default if unset
+        pkgShadow: null, // optional global drop-shadow color for package cards
+        priceFill: null,   // optional text color for the price ("$1.75") on package cards
+        priceStroke: null, // optional text outline color for the price
+        priceShadow: null  // optional text-shadow color for the price
       },
       profileImage: null,  // filename inside public/uploads/, e.g. "profile.jpg"
       coverImage: null,    // filename inside public/uploads/, e.g. "cover.jpg" (legacy, kept for backward compat)
@@ -160,7 +164,8 @@ function buildSeedData() {
         tiktok: null
       },
       gameLogos: {},       // { [gameId]: filename inside public/uploads/ }
-      cardBackgrounds: {},  // { [gameId]: filename inside public/uploads/ } — optional photo behind each package card on /topup
+      cardBackgrounds: {},  // { [gameId]: filename inside public/uploads/ } — optional single photo/video behind each package card on /topup
+      cardBackgroundSlides: {}, // { [gameId]: [filenames] } — optional multi-image slideshow (max 8) shown instead of a single cardBackgrounds image when present
       starfieldVideo: null  // optional admin-uploaded video (mp4/webm) shown as a shooting-star/meteor overlay on every page, in place of the built-in CSS animation
     }
   };
@@ -189,15 +194,22 @@ function readDB() {
     };
   }
   if (!data.settings.colors) {
-    data.settings.colors = { heading: '#F4F6FB', body: '#9AA3B8', accent: '#FFB84D', pkgFill: null, pkgStroke: null };
+    data.settings.colors = { heading: '#F4F6FB', body: '#9AA3B8', accent: '#FFB84D', pkgFill: null, pkgStroke: null, pkgShadow: null, priceFill: null, priceStroke: null, priceShadow: null };
   }
   if (data.settings.colors.pkgFill === undefined) data.settings.colors.pkgFill = null;
   if (data.settings.colors.pkgStroke === undefined) data.settings.colors.pkgStroke = null;
+  if (data.settings.colors.pkgShadow === undefined) data.settings.colors.pkgShadow = null;
+  if (data.settings.colors.priceFill === undefined) data.settings.colors.priceFill = null;
+  if (data.settings.colors.priceStroke === undefined) data.settings.colors.priceStroke = null;
+  if (data.settings.colors.priceShadow === undefined) data.settings.colors.priceShadow = null;
   if (data.settings.gameLogos === undefined) {
     data.settings.gameLogos = {};
   }
   if (data.settings.cardBackgrounds === undefined) {
     data.settings.cardBackgrounds = {};
+  }
+  if (data.settings.cardBackgroundSlides === undefined) {
+    data.settings.cardBackgroundSlides = {};
   }
   if (data.settings.starfieldVideo === undefined) {
     data.settings.starfieldVideo = null;
