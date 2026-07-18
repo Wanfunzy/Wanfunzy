@@ -1,5 +1,19 @@
 // views/layout.js — shared HTML shell + small inline SVG icons used across pages.
 
+// Starfield + shooting-star background, injected once here so every page
+// (home, topup, admin, etc.) gets it automatically without each view
+// needing to remember to add it. Pure CSS/HTML — no images, no JS, so it
+// costs nothing on slow connections and never fails to load.
+const STARFIELD_HTML = `
+<div class="sp-starfield" aria-hidden="true">
+<div class="sp-stars sp-stars-far"></div>
+<div class="sp-stars sp-stars-near"></div>
+<div class="sp-shooting-star" style="top:8%; left:75%; animation-delay:0.5s;"></div>
+<div class="sp-shooting-star" style="top:18%; left:40%; animation-delay:4.5s;"></div>
+<div class="sp-shooting-star" style="top:4%; left:92%; animation-delay:8.5s;"></div>
+<div class="sp-shooting-star" style="top:30%; left:15%; animation-delay:12.5s;"></div>
+</div>`;
+
 function layout({ title, body, head = '' }) {
   return `<!DOCTYPE html>
 <html lang="km">
@@ -38,7 +52,10 @@ font-family: 'Rajdhani', 'Noto Sans Khmer', -apple-system, sans-serif;
   ${head}
 </head>
 <body>
+${STARFIELD_HTML}
+<div class="sp-page-content">
 ${body}
+</div>
 </body>
 </html>`;
 }
