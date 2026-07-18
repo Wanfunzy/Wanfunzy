@@ -249,7 +249,15 @@ const ALLOWED_IMAGE_TYPES = {
   'image/png': '.png',
   'image/webp': '.webp'
 };
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB
+// Video is only accepted where the caller explicitly opts in (currently:
+// the per-game "Background Banner" upload) — everywhere else (logos,
+// package icons, KHQR image, etc.) stays image-only exactly as before.
+const ALLOWED_VIDEO_TYPES = {
+  'video/mp4': '.mp4',
+  'video/webm': '.webm'
+};
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB — images
+const MAX_VIDEO_UPLOAD_BYTES = 20 * 1024 * 1024; // 20MB — short/compressed banner clips
 
 function ensureUploadsDir() {
   if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -258,19 +266,31 @@ function ensureUploadsDir() {
 // Accepts a data URL like "data:image/png;base64,...." and writes the decoded
 // bytes to public/uploads/<random-name>.<ext>. Returns the filename (not the
 // full path) on success, or throws on invalid/oversized input.
-function saveUploadedImage(dataUrl, prefix) {
+// Pass { allowVideo: true } to also accept data:video/mp4 or data:video/webm
+// (used only by the per-game Background Banner upload, which supports a
+// short looping clip instead of a static image).
+function saveUploadedImage(dataUrl, prefix, opts) {
+  opts = opts || {};
   ensureUploadsDir();
-  const match = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(dataUrl || '');
+  const combinedTypes = opts.allowVideo
+    ? Object.assign({}, ALLOWED_IMAGE_TYPES, ALLOWED_VIDEO_TYPES)
+    : ALLOWED_IMAGE_TYPES;
+  const mimePattern = Object.keys(combinedTypes).map(m => m.replace('/', '\\/')).join('|');
+  const match = new RegExp(`^data:(${mimePattern});base64,(.+)$`).exec(dataUrl || '');
   if (!match) {
-    throw new Error('Unsupported image format. Use JPG, PNG, or WEBP.');
+    throw new Error(opts.allowVideo
+      ? 'Unsupported format. Use JPG, PNG, WEBP, MP4, or WEBM.'
+      : 'Unsupported image format. Use JPG, PNG, or WEBP.');
   }
   const mimeType = match[1];
   const base64Data = match[2];
-  const ext = ALLOWED_IMAGE_TYPES[mimeType];
+  const ext = combinedTypes[mimeType];
+  const isVideo = mimeType.startsWith('video/');
   const buffer = Buffer.from(base64Data, 'base64');
 
-  if (buffer.length > MAX_UPLOAD_BYTES) {
-    throw new Error('Image is too large (max 5MB).');
+  const maxBytes = isVideo ? MAX_VIDEO_UPLOAD_BYTES : MAX_UPLOAD_BYTES;
+  if (buffer.length > maxBytes) {
+    throw new Error(isVideo ? 'Video is too large (max 20MB).' : 'Image is too large (max 5MB).');
   }
 
   // Defense-in-depth: strip anything that isn't a safe filename character
@@ -295,7 +315,7 @@ function deleteUploadedImage(filename) {
   // passed through to fs.unlinkSync, even though current callers only ever
   // pass back filenames that came from saveUploadedImage() in the first
   // place.
-  if (!/^[a-zA-Z0-9_-]+-[a-z0-9]+-[a-f0-9]+\.(jpg|png|webp)$/.test(filename)) return;
+  if (!/^[a-zA-Z0-9_-]+-[a-z0-9]+-[a-f0-9]+\.(jpg|png|webp|mp4|webm)$/.test(filename)) return;
   const filePath = path.join(UPLOADS_DIR, filename);
   if (!filePath.startsWith(UPLOADS_DIR)) return;
   if (fs.existsSync(filePath)) {
