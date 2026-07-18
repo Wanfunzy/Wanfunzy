@@ -1388,7 +1388,7 @@ async function handleUpdateColors(req, res) {
   // Package card Fill/Stroke are optional — an empty string clears the
   // override back to the theme default, unlike heading/body/accent which
   // always require a valid hex value.
-  ['pkgFill', 'pkgStroke'].forEach(key => {
+  ['pkgFill', 'pkgStroke', 'pkgShadow', 'priceFill', 'priceStroke', 'priceShadow'].forEach(key => {
     if (typeof body[key] === 'string') {
       if (body[key] === '') data.settings.colors[key] = null;
       else if (hexPattern.test(body[key])) data.settings.colors[key] = body[key];
@@ -1572,6 +1572,40 @@ async function handleRemoveCoverCarouselImage(req, res, params) {
   if (isNaN(index) || index < 0 || index >= data.settings.coverImages.length) return sendJSON(res, 400, { ok: false, error: 'Invalid image index' });
   const [removed] = data.settings.coverImages.splice(index, 1); db.deleteUploadedImage(removed);
   db.writeDB(data); sendJSON(res, 200, { ok: true, coverImages: data.settings.coverImages });
+}
+
+// Per-game /topup banner slideshow (max 8 images) — same pattern as the
+// homepage Cover Carousel above, scoped to one game at a time. Images
+// only (no video — a slideshow of clips would be a much heavier download
+// for the same visual purpose the single card-background video already
+// covers).
+async function handleUploadCardBackgroundSlide(req, res, params) {
+  const session = getSession(req); if (!session) return sendJSON(res, 401, { ok: false, error: 'Unauthorized' });
+  if (!requireCsrf(req, res, session)) return;
+  const data = db.readDB(); const game = data.games.find(g => g.id === params.gameId);
+  if (!game) return sendJSON(res, 404, { ok: false, error: 'Game not found' });
+  if (!data.settings.cardBackgroundSlides) data.settings.cardBackgroundSlides = {};
+  if (!data.settings.cardBackgroundSlides[game.id]) data.settings.cardBackgroundSlides[game.id] = [];
+  if (data.settings.cardBackgroundSlides[game.id].length >= 8) return sendJSON(res, 400, { ok: false, error: 'អនុញ្ញាតតែ 8 រូបភាពអតិបរមា' });
+  try {
+    const raw = await readBody(req, 8 * 1024 * 1024); const body = parseBody(req, raw);
+    const filename = db.saveUploadedImage(body.image, 'cardslide-' + game.id + '-' + Date.now());
+    data.settings.cardBackgroundSlides[game.id].push(filename); db.writeDB(data);
+    sendJSON(res, 200, { ok: true, filename, slides: data.settings.cardBackgroundSlides[game.id] });
+  } catch (err) { sendJSON(res, 400, { ok: false, error: err.message || 'Upload failed' }); }
+}
+
+async function handleRemoveCardBackgroundSlide(req, res, params) {
+  const session = getSession(req); if (!session) return sendJSON(res, 401, { ok: false, error: 'Unauthorized' });
+  if (!requireCsrf(req, res, session)) return;
+  const data = db.readDB(); const game = data.games.find(g => g.id === params.gameId);
+  if (!game) return sendJSON(res, 404, { ok: false, error: 'Game not found' });
+  if (!data.settings.cardBackgroundSlides) data.settings.cardBackgroundSlides = {};
+  const slides = data.settings.cardBackgroundSlides[game.id] || [];
+  const index  = parseInt(params.index, 10);
+  if (isNaN(index) || index < 0 || index >= slides.length) return sendJSON(res, 400, { ok: false, error: 'Invalid image index' });
+  const [removed] = slides.splice(index, 1); db.deleteUploadedImage(removed);
+  db.writeDB(data); sendJSON(res, 200, { ok: true, slides });
 }
 
 async function handleUploadCardBackground(req, res, params) {
@@ -1784,6 +1818,10 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/admin/settings/khqr-image'            && method === 'POST')   return handleUploadKhqrImage(req, res);
     if (pathname === '/api/admin/settings/khqr-image'            && method === 'DELETE') return handleDeleteKhqrImage(req, res);
     if (pathname === '/api/admin/settings/cover-carousel'        && method === 'POST')   return handleUploadCoverCarouselImage(req, res);
+    m = pathname.match(/^\/api\/admin\/settings\/card-slides\/([^/]+)$/);
+    if (m && method === 'POST') return handleUploadCardBackgroundSlide(req, res, { gameId: m[1] });
+    m = pathname.match(/^\/api\/admin\/settings\/card-slides\/([^/]+)\/(\d+)$/);
+    if (m && method === 'DELETE') return handleRemoveCardBackgroundSlide(req, res, { gameId: m[1], index: m[2] });
     if (pathname === '/api/admin/settings/page-background-color' && method === 'POST')   return handleSetPageBackgroundColor(req, res);
     if (pathname === '/api/admin/settings/brand-glow-colors'     && method === 'POST')   return handleSetBrandGlowColors(req, res);
     if (pathname === '/api/admin/settings/text-effects'          && method === 'POST')   return handleSetTextEffects(req, res);
