@@ -118,10 +118,9 @@ async function fulfillWithMooGold(order) {
   // if this ever needs to be made fully dynamic in the future.
   if (order.serverId) orderData['Server ID'] = String(order.serverId);
 
-  console.log('[MooGold] create_order payload:', JSON.stringify({
-    'product-id': order.moogoldProductId, 'User ID': order.playerId,
-    'Server ID': order.serverId || '(none)'
-  }));
+  const logPayload = { 'product-id': order.moogoldProductId, 'User ID': order.playerId };
+  if (order.serverId) logPayload['Server ID'] = order.serverId;
+  console.log('[MooGold] create_order payload:', JSON.stringify(logPayload));
 
   const payload        = { path: 'order/create_order', data: orderData, partnerOrderId: order.code };
   const signingPayload = payload; // sign exactly what we send
@@ -181,9 +180,41 @@ async function validatePlayerWithMooGold(productId, playerId, serverId) {
   } catch (e) { console.error('[MooGold] validate error:', e.message); return { ok: null, error: e.message }; }
 }
 
+// Calls MooGold's "Product Details" API to get the real list of
+// variation_id values (+ name, price, stock status) for a given MooGold
+// product ID. This is the ONLY correct way to get a variation_id per the
+// official API docs ("It is the variation_id of Product Details API.
+// Call the Product Details API to get the variation_id of the product
+// you want to purchase and put it here.") — copying it by hand from the
+// reseller website (as was done before) risks grabbing a stale/wrong ID,
+// which is the likely cause of the "422: Product ID incorrect or not
+// authorized" fulfillment failures seen for Free Fire.
+async function getProductVariations(productId) {
+  if (!moogoldEnabled()) return { ok: false, error: 'MooGold not configured' };
+  const payload = { path: 'product/product_detail', product_id: Number(productId) };
+  try {
+    const result = await moogoldRequest('product/product_detail', payload, payload);
+    console.log('[MooGold] product_detail raw:', JSON.stringify(result).slice(0, 500));
+    if (result && Array.isArray(result.Variation)) {
+      return {
+        ok: true,
+        productName: result.Product_Name || '',
+        variations: result.Variation.map(v => ({
+          name: v.variation_name,
+          variationId: v.variation_id,
+          price: v.variation_price,
+          stockStatus: v.stock_status
+        }))
+      };
+    }
+    return { ok: false, error: (result && (result.err_message || result.message)) || 'Unexpected response format' };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+
 module.exports = {
   moogoldEnabled,
   moogoldRequest,
   fulfillWithMooGold,
-  validatePlayerWithMooGold
+  validatePlayerWithMooGold,
+  getProductVariations
 };
