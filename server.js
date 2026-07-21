@@ -371,17 +371,6 @@ async function validateGamePlayer(gameId, playerId, serverId) {
     const mgResult = await validatePlayerWithMooGold(MOOGOLD_PRODUCT_ID, playerId, serverId);
 
     if (mgResult.ok === true) {
-      // [CONFIRMED via production logs] MooGold's Free Fire validate
-      // (product 7847) always returns status:true with username:null,
-      // regardless of whether the Player ID is real or made up. It is
-      // NOT a real check for Free Fire. So for FF specifically, ok:true
-      // with no username must be treated as UNVERIFIED and blocked —
-      // never shown to the customer as a pass. MLBB/PUBG/HOK still trust
-      // MooGold's result as before.
-      if (isFF && !mgResult.username) {
-        console.log('[Validate][MooGold] FF returned no username — MooGold does not verify FF, blocking');
-        return { ok: false, message: 'មិនអាចផ្ទៀងផ្ទាត់ឈ្មោះក្នុងហ្គេម Free Fire បានទេនៅពេលនេះ។ សូមព្យាយាមម្តងទៀត ឬទាក់ទង admin។' };
-      }
       console.log('[Validate][MooGold] SUCCESS — game:', gid, '| username:', mgResult.username || '(none)');
       return { ok: true, username: mgResult.username || '' };
     }
@@ -392,7 +381,20 @@ async function validateGamePlayer(gameId, playerId, serverId) {
     console.log('[Validate][MooGold] not authorized for product:', MOOGOLD_PRODUCT_ID);
   }
 
-  // [POLICY] All paths unavailable — block purchase. Never let unverified ID through.
+  // [POLICY per owner, updated] MooGold doesn't reliably verify Free
+  // Fire (always returns no username), PUBG, or HOK (validation not
+  // authorized on this account at all — confirmed via MooGold CS
+  // message and manual testing on moogold.com). Rather than blocking
+  // these 3 games from selling entirely while waiting on MooGold to fix
+  // this, the owner has decided to accept any correctly-formatted
+  // Player ID for them — no in-game username shown, same trust level
+  // these games had before real verification was attempted. MLBB (and
+  // any future/unrecognized game) still hard-blocks here as a safety
+  // default, since MLBB's real verification already works reliably.
+  if (isFF || isPubg || isHok) {
+    console.log('[Validate] ACCEPTED (format-only, no verification available) — game:', gid, '| playerId:', playerId);
+    return { ok: true, username: '' };
+  }
   console.log('[Validate] BLOCKED (all paths unavailable) — game:', gid, '| playerId:', playerId);
   return { ok: false, message: 'មិនអាចផ្ទៀងផ្ទាត់ Player ID បានទេនៅពេលនេះ។ សូមព្យាយាមម្តងទៀត ឬទាក់ទង admin។' };
 }
