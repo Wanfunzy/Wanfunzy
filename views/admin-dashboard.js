@@ -198,6 +198,10 @@ function renderGameSection(game, packages, gameLogos, cardBackgrounds, sectionIm
 <div class="game-pkg-sub">${escapeHtml(game.currencyLabel)} ${game.requiresServerId ? '· ត្រូវការ Server ID' : '· Player ID ប៉ុណ្ណោះ'}</div>
 </div>
 </div>
+<div style="margin-bottom:18px;">
+<button type="button" class="btn btn-ghost btn-sm moogold-variations-btn" data-game-id="${game.id}">🔍 មើល Variation ID ត្រឹមត្រូវ (MooGold)</button>
+<div class="moogold-variations-result" data-game-id="${game.id}" style="display:none;margin-top:10px;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:260px;overflow-y:auto;font-size:12px;"></div>
+</div>
 <div class="upload-box upload-box-inline" data-upload-endpoint="/api/admin/settings/game-logo/${game.id}" data-delete-endpoint="/api/admin/settings/game-logo/${game.id}">
 <div class="upload-box-body">
   ${logoPreview ? `<img src="${logoPreview}" class="upload-preview upload-preview-round" alt="logo" />` : `<div class="upload-preview upload-preview-empty upload-preview-round">Logo</div>`}
@@ -1180,6 +1184,37 @@ setTimeout(() => location.reload(), 600);
 });
 });
 // ---------- Per-game Banner Slideshow (multi-image, max 8) ----------
+// ---------- MooGold Variation ID lookup (per game) ----------
+document.querySelectorAll('.moogold-variations-btn').forEach(function (btn) {
+btn.addEventListener('click', async function () {
+const gameId = btn.dataset.gameId;
+const box = document.querySelector('.moogold-variations-result[data-game-id="' + gameId + '"]');
+if (!box) return;
+box.style.display = 'block';
+box.innerHTML = 'កំពុងផ្ទុក...';
+btn.disabled = true;
+try {
+const res = await fetch('/api/admin/moogold/variations/' + gameId);
+const data = await res.json();
+if (!data.ok) {
+box.innerHTML = '<span style="color:var(--danger,#e5484d);">' + (data.error || 'មានបញ្ហា') + '</span>';
+} else if (!data.variations || !data.variations.length) {
+box.innerHTML = 'គ្មាន Variation រកឃើញទេ';
+} else {
+box.innerHTML = '<div style="margin-bottom:6px;font-weight:600;">' + (data.productName || '') + ' (product ' + data.productId + ')</div>' +
+data.variations.map(function (v) {
+return '<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--line);">' +
+'<span>' + v.name + '</span>' +
+'<span style="white-space:nowrap;">$' + v.price + ' · ID: <b>' + v.variationId + '</b> · ' + v.stockStatus + '</span>' +
+'</div>';
+}).join('');
+}
+} catch (err) {
+box.innerHTML = '<span style="color:var(--danger,#e5484d);">មិនអាចទាញយកទិន្នន័យបានទេ</span>';
+}
+btn.disabled = false;
+});
+});
 document.querySelectorAll('.card-slide-input').forEach(function (input) {
 input.addEventListener('change', async function () {
 const file = input.files[0];
