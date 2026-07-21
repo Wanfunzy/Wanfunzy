@@ -18,7 +18,7 @@ const url    = require('url');
 // ─────────────────────────────────────────────
 const db   = require('./db');
 const khqr = require('./khqr');
-const { moogoldEnabled, moogoldRequest, fulfillWithMooGold } = require('./moogold');
+const { moogoldEnabled, moogoldRequest, fulfillWithMooGold, getProductVariations } = require('./moogold');
 
 const GAME_MODULES = {
   mlbb:     require('./games/mlbb'),
@@ -437,9 +437,8 @@ function confirmOrderPaidAndFulfill(order, data) {
       orderRef.serverId = orderRef.serverId || order.serverId;
       orderRef.gameId   = orderRef.gameId   || order.gameId;
       orderRef.gameName = orderRef.gameName || order.gameName;
-      console.log('[MooGold] fulfill fields → playerId:', orderRef.playerId,
-        '| serverId:', orderRef.serverId || '(none)', '| gameId:', orderRef.gameId,
-        '| moogoldProductId:', orderRef.moogoldProductId);
+      const serverIdPart = orderRef.serverId ? ` | serverId: ${orderRef.serverId}` : '';
+      console.log(`[MooGold] fulfill fields → playerId: ${orderRef.playerId}${serverIdPart} | gameId: ${orderRef.gameId} | moogoldProductId: ${orderRef.moogoldProductId}`);
     }
     const fulfillResult = await fulfillWithMooGold(orderRef || order);
     console.log('[MooGold] fulfill result for', order.code, ':', JSON.stringify(fulfillResult));
@@ -1314,6 +1313,20 @@ async function handleRemoveCoverCarouselImage(req, res, params) {
 // only (no video — a slideshow of clips would be a much heavier download
 // for the same visual purpose the single card-background video already
 // covers).
+// Fetches the real list of MooGold variation_id values for a game's
+// product (via games/*.js's productId), so the admin can pick the
+// correct one for each package instead of copying it by hand off the
+// reseller website — see getProductVariations() in moogold.js for why
+// that manual approach is unreliable.
+async function handleGetMoogoldVariations(req, res, params) {
+  const session = getSession(req); if (!session) return sendJSON(res, 401, { ok: false, error: 'Unauthorized' });
+  const mod = GAME_MODULES[params.gameId];
+  if (!mod) return sendJSON(res, 404, { ok: false, error: 'Unknown game' });
+  const result = await getProductVariations(mod.productId);
+  if (!result.ok) return sendJSON(res, 400, result);
+  sendJSON(res, 200, { ok: true, productName: result.productName, productId: mod.productId, variations: result.variations });
+}
+
 async function handleUploadCardBackgroundSlide(req, res, params) {
   const session = getSession(req); if (!session) return sendJSON(res, 401, { ok: false, error: 'Unauthorized' });
   if (!requireCsrf(req, res, session)) return;
@@ -1567,6 +1580,8 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/admin/settings/starfield-video' && method === 'DELETE') return handleDeleteStarfieldVideo(req, res);
     if (pathname === '/api/admin/settings/cover-video' && method === 'POST')   return handleUploadCoverVideo(req, res);
     if (pathname === '/api/admin/settings/cover-video' && method === 'DELETE') return handleDeleteCoverVideo(req, res);
+    m = pathname.match(/^\/api\/admin\/moogold\/variations\/([^/]+)$/);
+    if (m && method === 'GET') return handleGetMoogoldVariations(req, res, { gameId: m[1] });
     m = pathname.match(/^\/api\/admin\/settings\/cover-carousel\/(\d+)$/);
     if (m && method === 'DELETE') return handleRemoveCoverCarouselImage(req, res, { index: m[1] });
     m = pathname.match(/^\/api\/admin\/settings\/social-icon\/([^/]+)$/);
