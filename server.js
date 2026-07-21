@@ -18,6 +18,14 @@ const url    = require('url');
 // ─────────────────────────────────────────────
 const db   = require('./db');
 const khqr = require('./khqr');
+const { moogoldEnabled, moogoldRequest, fulfillWithMooGold } = require('./moogold');
+
+const GAME_MODULES = {
+  mlbb:     require('./games/mlbb'),
+  freefire: require('./games/freefire'),
+  pubgm:    require('./games/pubgm'),
+  hok:      require('./games/hok')
+};
 
 const { renderHome }              = require('./views/home');
 const { renderAdminLogin }        = require('./views/admin-login');
@@ -73,334 +81,23 @@ console.log('[KHQR] token set:', KHQR_CONFIG.token
   : 'NO — deeplink and auto-verify disabled');
 console.log('[MooGold] auto-fulfill enabled:', moogoldEnabled());
 
-// ═════════════════════════════════════════════
-//  MooGold API
-// ═════════════════════════════════════════════
-
-function moogoldEnabled() {
-  return !!(process.env.MOOGOLD_PARTNER_ID && process.env.MOOGOLD_SECRET_KEY);
-}
-
-function moogoldAuth(payload, reqPath) {
-  const partnerId = process.env.MOOGOLD_PARTNER_ID;
-  const secretKey = process.env.MOOGOLD_SECRET_KEY;
-  const timestamp = Math.floor(Date.now() / 1000).toString();
-  const basicAuth = Buffer.from(`${partnerId}:${secretKey}`).toString('base64');
-  const authSig   = crypto.createHmac('sha256', secretKey)
-    .update(JSON.stringify(payload) + timestamp + reqPath).digest('hex');
-  return { basicAuth, authSig, timestamp };
-}
-
-function moogoldRequest(reqPath, payload, signingPayload, _retried) {
-  return new Promise((resolve, reject) => {
-    const { basicAuth, authSig, timestamp } = moogoldAuth(signingPayload || payload, reqPath);
-    const body         = JSON.stringify(payload);
-    const workerUrl    = process.env.MOOGOLD_WORKER_URL;
-    const workerSecret = process.env.MOOGOLD_WORKER_SECRET;
-
-    const headers = {
-      'Content-Type':   'application/json',
-      'Content-Length': Buffer.byteLength(body),
-      'Authorization':  `Basic ${basicAuth}`,
-      'auth':           authSig,
-      'timestamp':      timestamp
-    };
-
-    let hostname, reqPathFinal;
-    if (workerUrl && workerSecret) {
-      const u = new URL(`${workerUrl}/${reqPath}`);
-      hostname     = u.hostname;
-      reqPathFinal = u.pathname;
-      headers['x-worker-secret'] = workerSecret;
-      console.log('[MooGold] via Worker:', u.href);
-    } else {
-      hostname     = 'moogold.com';
-      reqPathFinal = `/wp-json/v1/api/${reqPath}`;
-    }
-
-    const req = https.request({ hostname, path: reqPathFinal, method: 'POST', headers, timeout: 30000 }, (res) => {
-      let data = '';
-      res.on('data', c => {
-        data += c;
-        if (data.length > 64 * 1024) req.destroy(new Error('Response too large'));
-      });
-      res.on('end', () => {
-        let parsed;
-        try { parsed = JSON.parse(data); }
-        catch (e) { return reject(new Error('Bad JSON from MooGold')); }
-
-        const errCode = parsed && (parsed.err_code || (parsed.data && parsed.data.err_code));
-        if (!_retried && (errCode === '426' || errCode === 426)) {
-          console.log('[MooGold] err 426 (Timestamp is incorrect) — retrying once with a fresh timestamp for', reqPath);
-          return resolve(moogoldRequest(reqPath, payload, signingPayload, true));
-        }
-
-        resolve(parsed);
-      });
-    });
-    req.on('timeout', () => req.destroy(new Error('MooGold timeout')));
-    req.on('error', reject);
-    req.write(body);
-    req.end();
-  });
-}
-
-async function fulfillWithMooGold(order) {
-  if (!moogoldEnabled())       return { ok: false, error: 'MooGold not configured' };
-  if (!order.moogoldProductId) return { ok: false, error: 'No moogoldProductId' };
-
-  const isMlbb = (order.gameId   || '').toLowerCase() === 'mlbb' ||
-                 (order.gameName || '').toLowerCase().includes('mobile legend');
-  let gameRequiresServer = isMlbb;
-  try {
-    const snap    = db.readDB();
-    const gameDoc = snap.games && snap.games.find(g => g.id === order.gameId);
-    if (gameDoc && gameDoc.requiresServerId) gameRequiresServer = true;
-  } catch (e) { /* non-fatal */ }
-
-  if (gameRequiresServer && !order.serverId) {
-    console.log('[MooGold] BLOCKED — missing Zone ID for', order.gameId, '| order:', order.code);
-    return { ok: false, error: `Zone ID ត្រូវតែបញ្ចូលសម្រាប់ game នេះ (${order.gameName || order.gameId})` };
-  }
-
-  // [FIX] MooGold's API requires the key "Zone ID" (with a space) for the
-  // server/zone value, NOT "Server". "User ID" (with space) is correct
-  // as-is and works fine. Sending "Server" caused MooGold to silently
-  // ignore the value entirely — account_details echoed back
-  // "Server ID": "" even though our payload's Server field was populated
-  // correctly — and the order was later refunded for incorrect details,
-  // despite the User ID + Zone ID pair being 100% correct (verified
-  // against the customer's own in-game profile screenshot: 592784466
-  // (10050), Cambodia/Phnom Penh).
-  const orderData = {
-    category:     1,
-    'product-id': Number(order.moogoldProductId),
-    quantity:     1,
-    'User ID':    String(order.playerId)
-  };
-  // [FIX] Confirmed by MooGold CS: the correct field name for MLBB is
-  // "Server ID" (with a space) — NOT "Server", "Zone ID", or "Zone_ID".
-  // CS also noted: different products may require different field names;
-  // call product/product_detail to get the exact field list per product
-  // if this ever needs to be made fully dynamic in the future.
-  if (order.serverId) orderData['Server ID'] = String(order.serverId);
-
-  console.log('[MooGold] create_order payload:', JSON.stringify({
-    'product-id': order.moogoldProductId, 'User ID': order.playerId,
-    'Server ID': order.serverId || '(none)'
-  }));
-
-  const payload        = { path: 'order/create_order', data: orderData, partnerOrderId: order.code };
-  const signingPayload = payload; // sign exactly what we send
-
-  try {
-    const result = await moogoldRequest('order/create_order', payload, signingPayload);
-    console.log('[MooGold] create_order response:', JSON.stringify(result));
-    const r = (result && result.data && typeof result.data === 'object') ? result.data : result;
-    const isOk = r && (
-      r.status === true || r.status === 'true' || r.status === 'processing' ||
-      r.status === 'completed' || r.message === 'Order has been created successfully' || !!(r.order_id)
-    );
-    console.log('[MooGold] isOk:', isOk, '| status:', r && r.status, '| msg:', r && r.message);
-    if (isOk) return {
-      ok: true,
-      moogoldOrderId: (r.account_details && r.account_details.order_id) || r.order_id || null,
-      status: r.status || 'processing'
-    };
-    if (r && (r.err_code === '420' || r.err_code === 420)) return { ok: true, status: 'duplicate-ignored' };
-    if (r && r.status === 'refunded')
-      return { ok: false, error: 'MooGold refunded — Player ID ឬ Zone ID មិនត្រឹមត្រូវ', refunded: true, moogoldOrderId: r.order_id || null };
-    if (r && (r.err_code === '111' || r.err_code === 111)) return { ok: false, error: 'MooGold: Insufficient Balance — សូមបញ្ចូលទឹកប្រាក់ MooGold!' };
-    if (r && (r.err_code === '422' || r.err_code === 422)) return { ok: false, error: 'MooGold: Product ID មិនត្រឹមត្រូវ ឬ មិនទាន់ authorized' };
-    if (r && (r.err_code === '114' || r.err_code === 114)) return { ok: false, error: 'MooGold: Product Out of Stock!' };
-    if (r && (r.err_code === '426' || r.err_code === 426)) return { ok: false, error: 'MooGold: Timestamp mismatch (retried once, still failing) — server clock ឬ network delay ខុសប្រក្រតី' };
-    return { ok: false, error: `MooGold err ${r && r.err_code}: ${r && r.err_message} | raw: ${JSON.stringify(result).slice(0, 300)}` };
-  } catch (e) { return { ok: false, error: e.message }; }
-}
-
-async function validatePlayerWithMooGold(productId, playerId, serverId) {
-  if (!moogoldEnabled() || !productId) return { ok: null };
-  // [FIX] Confirmed field name: "Server ID" (per MooGold CS).
-  const payload = {
-    path: 'product/validate',
-    data: { 'product-id': String(productId), 'User ID': String(playerId), ...(serverId ? { 'Server ID': String(serverId) } : {}) }
-  };
-  try {
-    const result = await moogoldRequest('product/validate', payload, payload);
-    console.log('[MooGold] validate raw:', JSON.stringify(result).slice(0, 400));
-    if (result && (result.status === true || result.status === 'true')) {
-      const uname = (result.username) || (result.data && result.data.username) || '';
-      return { ok: true, username: uname, message: result.message || '' };
-    }
-    const msg  = (result && (result.message || result.err_message)) || '';
-    const code = (result && (result.code || result.err_code)) || '';
-    const httpStatus = (result && result.data && result.data.status) || 0;
-    const notAuthorized =
-      code === 'rest_no_route' || httpStatus === 404 ||
-      msg.toLowerCase().includes('validation is not available') ||
-      msg.toLowerCase().includes('kindly contact') ||
-      msg.toLowerCase().includes('no route was found');
-    if (notAuthorized) {
-      console.log('[MooGold] validate endpoint not authorized — hybrid mode');
-      return { ok: null, skipped: true, message: msg };
-    }
-    return { ok: false, message: msg || 'Player ID ឬ Zone ID មិនត្រឹមត្រូវ' };
-  } catch (e) { console.error('[MooGold] validate error:', e.message); return { ok: null, error: e.message }; }
-}
-
-// ── Free Fire username lookup via Cloudflare Worker (ff-worker.js) ───────
-// MooGold's Free Fire validate (product 7847) does NOT actually check if
-// the account exists — it accepts any numeric ID. The real check is done
-// through a Cloudflare Worker (same architecture as MLBB_WORKER_URL) that
-// proxies Garena's shop2game.com nickname-lookup endpoint. Set FF_WORKER_URL
-// and FF_WORKER_SECRET env vars in Railway once the worker is deployed
-// (see ff-worker.js for deployment instructions).
-async function lookupFreeFireUsernameViaWorker(playerId) {
-  const workerUrl = process.env.FF_WORKER_URL;
-  if (!workerUrl) {
-    console.log('[FF Worker] FF_WORKER_URL not configured — cannot verify Free Fire accounts');
-    return { ok: null, error: 'FF_WORKER_URL not configured' };
-  }
-  return new Promise((resolve) => {
-    const body         = JSON.stringify({ playerId: String(playerId) });
-    const workerSecret = process.env.FF_WORKER_SECRET || '';
-    let u;
-    try { u = new URL(workerUrl); } catch (e) { return resolve({ ok: null, error: 'Bad FF_WORKER_URL' }); }
-    const headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
-    if (workerSecret) headers['X-Worker-Secret'] = workerSecret;
-    const req = https.request(
-      { hostname: u.hostname, path: u.pathname, method: 'POST', headers, timeout: 8000 },
-      (res) => {
-        let data = '';
-        res.on('data', c => { data += c; });
-        res.on('end', () => {
-          try {
-            const json = JSON.parse(data);
-            if (json.ok === true && json.username) resolve({ ok: true, username: json.username });
-            else resolve({ ok: false, message: json.message || 'Player ID មិនត្រឹមត្រូវ' });
-          } catch (e) { resolve({ ok: null, error: 'Parse error' }); }
-        });
-      }
-    );
-    req.on('error',   e  => resolve({ ok: null, error: e.message }));
-    req.on('timeout', () => { req.destroy(); resolve({ ok: null, error: 'FF Worker timeout' }); });
-    req.write(body); req.end();
-  });
-}
-
 // Renamed from validateMLBBPlayer → validateGamePlayer.
-// Routes each game to the correct MooGold product ID, and for Free Fire
-// also attempts a third-party username lookup so the UI can display the
-// real in-game name (like Karina TopUp does).
-//
-// MooGold product page IDs (confirmed):
-//   MLBB        → 15145   (reseller.moogold.com/product.php?product=15145&category=50)
-//   PUBG Mobile → 6963    (reseller.moogold.com/product.php?product=6963&category=50)
-//   Free Fire   → 7847    (reseller.moogold.com/product.php?product=7847&category=50)
-//   HOK (Global)→ 5177311 (reseller.moogold.com/product.php?product=5177311&category=50)
+// Thin dispatcher — each game's actual validation policy (Worker vs
+// MooGold, format-only accept vs hard block, etc.) lives in its own file
+// under games/. See games/mlbb.js, games/freefire.js, games/pubgm.js,
+// games/hok.js for the game-specific logic and MooGold product IDs.
 async function validateGamePlayer(gameId, playerId, serverId) {
   const gid = (gameId || '').toLowerCase();
-  const isMlbb = !gid || gid === 'mlbb' || gid.includes('mobile');
-  const isPubg  = gid === 'pubg' || gid === 'pubgm' || gid.includes('pubg');
-  const isFF    = gid === 'ff'   || gid === 'freefire' || gid.includes('free');
-  const isHok   = gid === 'hok'  || gid.includes('honor');
+  let mod;
+  if (!gid || gid === 'mlbb' || gid.includes('mobile'))       mod = GAME_MODULES.mlbb;
+  else if (gid === 'pubg' || gid === 'pubgm' || gid.includes('pubg')) mod = GAME_MODULES.pubgm;
+  else if (gid === 'ff' || gid === 'freefire' || gid.includes('free')) mod = GAME_MODULES.freefire;
+  else if (gid === 'hok' || gid.includes('honor'))             mod = GAME_MODULES.hok;
+  else mod = GAME_MODULES.mlbb; // safety default — matches prior behavior where an empty/unknown gameId fell through to MLBB's stricter path
 
-  // MLBB Worker path — only for MLBB, skipped for all other games
-  if (isMlbb) {
-    const workerUrl = process.env.MLBB_WORKER_URL;
-    if (workerUrl) {
-      try {
-        const result = await new Promise((resolve) => {
-          const body         = JSON.stringify({ playerId: String(playerId), serverId: String(serverId || '0') });
-          const workerSecret = process.env.MLBB_WORKER_SECRET || '';
-          let u;
-          try { u = new URL(workerUrl); } catch (e) { return resolve({ ok: null, error: 'Bad worker URL' }); }
-          const headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
-          if (workerSecret) headers['X-Worker-Secret'] = workerSecret;
-          const req = https.request(
-            { hostname: u.hostname, path: u.pathname, method: 'POST', headers, timeout: 8000 },
-            (res) => {
-              let data = '';
-              res.on('data', c => { data += c; });
-              res.on('end', () => {
-                try {
-                  const json = JSON.parse(data);
-                  if (json.ok === true && json.username) resolve({ ok: true, username: json.username });
-                  else if (json.ok === false)            resolve({ ok: false, message: json.message || 'Player ID ឬ Zone ID មិនត្រឹមត្រូវ' });
-                  else                                   resolve({ ok: null, error: 'Worker response unclear' });
-                } catch (e) { resolve({ ok: null, error: 'Parse error' }); }
-              });
-            }
-          );
-          req.on('error',   e  => resolve({ ok: null, error: e.message }));
-          req.on('timeout', () => { req.destroy(); resolve({ ok: null, error: 'Worker timeout' }); });
-          req.write(body); req.end();
-        });
-        console.log('[Validate][MLBB Worker] result:', result.ok, result.username || result.message);
-        if (result.ok === true || result.ok === false) return result;
-        console.log('[Validate][MLBB Worker] unavailable:', result.error, '— falling back to MooGold');
-      } catch (e) { console.log('[Validate][MLBB Worker] threw:', e.message, '— falling back to MooGold'); }
-    }
-  }
-
-  // Free Fire Worker path — mirrors MLBB Worker exactly. MooGold's own
-  // Free Fire validate (product 7847) does NOT actually check if the
-  // account exists (accepts any numeric ID), so the Worker — which proxies
-  // Garena's nickname lookup — is the only source of a genuine username
-  // for Free Fire. Only a genuine ok:true (real username found) short-
-  // circuits here; ok:false/null (Worker down, endpoint broken, or ID
-  // genuinely not found) falls through to the same format-only accept
-  // policy as PUBG/HOK below, per owner's decision — the Worker's
-  // "not found" result isn't trustworthy while its endpoint is broken.
-  if (isFF) {
-    const workerUrl = process.env.FF_WORKER_URL;
-    if (workerUrl) {
-      try {
-        const result = await lookupFreeFireUsernameViaWorker(playerId);
-        console.log('[Validate][FF Worker] result:', result.ok, result.username || result.message);
-        if (result.ok === true) return result;
-        console.log('[Validate][FF Worker] no confirmed match:', result.message || result.error, '— falling back to MooGold');
-      } catch (e) { console.log('[Validate][FF Worker] threw:', e.message, '— falling back to MooGold'); }
-    } else {
-      console.log('[Validate][FF Worker] FF_WORKER_URL not set — falling back to MooGold (unreliable for FF)');
-    }
-  }
-
-  // MooGold validate — confirm account exists for all 4 games
-  const MOOGOLD_PRODUCT_ID = isPubg ? '6963' : isFF ? '7847' : isHok ? '5177311' : '15145';
-  console.log('[Validate] game:', gid, '| productId:', MOOGOLD_PRODUCT_ID, '| playerId:', playerId, '| serverId:', serverId || '(none)');
-
-  if (moogoldEnabled()) {
-    const mgResult = await validatePlayerWithMooGold(MOOGOLD_PRODUCT_ID, playerId, serverId);
-
-    if (mgResult.ok === true) {
-      console.log('[Validate][MooGold] SUCCESS — game:', gid, '| username:', mgResult.username || '(none)');
-      return { ok: true, username: mgResult.username || '' };
-    }
-    if (mgResult.ok === false) {
-      console.log('[Validate][MooGold] BLOCKED — game:', gid, '|', mgResult.message);
-      return { ok: false, message: mgResult.message };
-    }
-    console.log('[Validate][MooGold] not authorized for product:', MOOGOLD_PRODUCT_ID);
-  }
-
-  // [POLICY per owner, updated] MooGold doesn't reliably verify Free
-  // Fire (always returns no username), PUBG, or HOK (validation not
-  // authorized on this account at all — confirmed via MooGold CS
-  // message and manual testing on moogold.com). Rather than blocking
-  // these 3 games from selling entirely while waiting on MooGold to fix
-  // this, the owner has decided to accept any correctly-formatted
-  // Player ID for them — no in-game username shown, same trust level
-  // these games had before real verification was attempted. MLBB (and
-  // any future/unrecognized game) still hard-blocks here as a safety
-  // default, since MLBB's real verification already works reliably.
-  if (isFF || isPubg || isHok) {
-    console.log('[Validate] ACCEPTED (format-only, no verification available) — game:', gid, '| playerId:', playerId);
-    return { ok: true, username: '' };
-  }
-  console.log('[Validate] BLOCKED (all paths unavailable) — game:', gid, '| playerId:', playerId);
-  return { ok: false, message: 'មិនអាចផ្ទៀងផ្ទាត់ Player ID បានទេនៅពេលនេះ។ សូមព្យាយាមម្តងទៀត ឬទាក់ទង admin។' };
+  return mod.validate(playerId, serverId);
 }
+
 
 async function pollMooGoldOrderStatus(orderCode, moogoldOrderId, maxAttempts = 30) {
   const delay = ms => new Promise(r => setTimeout(r, ms));
