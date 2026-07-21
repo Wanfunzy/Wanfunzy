@@ -346,17 +346,20 @@ async function validateGamePlayer(gameId, playerId, serverId) {
   // Free Fire Worker path — mirrors MLBB Worker exactly. MooGold's own
   // Free Fire validate (product 7847) does NOT actually check if the
   // account exists (accepts any numeric ID), so the Worker — which proxies
-  // Garena's real shop2game.com nickname lookup — is the only source of a
-  // genuine username for Free Fire. Falls back to MooGold below only if
-  // FF_WORKER_URL is unset or the Worker is unreachable.
+  // Garena's nickname lookup — is the only source of a genuine username
+  // for Free Fire. Only a genuine ok:true (real username found) short-
+  // circuits here; ok:false/null (Worker down, endpoint broken, or ID
+  // genuinely not found) falls through to the same format-only accept
+  // policy as PUBG/HOK below, per owner's decision — the Worker's
+  // "not found" result isn't trustworthy while its endpoint is broken.
   if (isFF) {
     const workerUrl = process.env.FF_WORKER_URL;
     if (workerUrl) {
       try {
         const result = await lookupFreeFireUsernameViaWorker(playerId);
         console.log('[Validate][FF Worker] result:', result.ok, result.username || result.message);
-        if (result.ok === true || result.ok === false) return result;
-        console.log('[Validate][FF Worker] unavailable:', result.error, '— falling back to MooGold');
+        if (result.ok === true) return result;
+        console.log('[Validate][FF Worker] no confirmed match:', result.message || result.error, '— falling back to MooGold');
       } catch (e) { console.log('[Validate][FF Worker] threw:', e.message, '— falling back to MooGold'); }
     } else {
       console.log('[Validate][FF Worker] FF_WORKER_URL not set — falling back to MooGold (unreliable for FF)');
