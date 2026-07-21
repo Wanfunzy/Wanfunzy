@@ -60,10 +60,13 @@ function renderPackageRow(pkg, packageIconImages) {
   const iconPreview = iconFile ? `/static/uploads/${iconFile}` : null;
   return `
 <div class="pkg-row" data-package-id="${pkg.id}">
-<label class="pkg-icon-upload" title="Upload រូបភាព icon" style="width:36px;height:36px;border-radius:8px;overflow:hidden;flex-shrink:0;cursor:pointer;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;background:var(--void);position:relative;">
+<div class="pkg-icon-wrap" style="position:relative;width:36px;height:36px;flex-shrink:0;">
+<label class="pkg-icon-upload" title="Upload រូបភាព icon" style="width:36px;height:36px;border-radius:8px;overflow:hidden;cursor:pointer;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;background:var(--void);position:relative;">
   ${iconPreview ? `<img src="${iconPreview}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;" />` : `<span style="font-size:18px;color:var(--text-faint);">+</span>`}
   <input type="file" accept="image/jpeg,image/png,image/webp" class="pkg-icon-input" data-package-id="${pkg.id}" style="position:absolute;inset:0;opacity:0;cursor:pointer;" />
 </label>
+  ${iconPreview ? `<button type="button" class="pkg-icon-remove-btn" data-package-id="${pkg.id}" title="លុប icon" style="position:absolute;top:-6px;right:-6px;width:16px;height:16px;padding:0;line-height:14px;border-radius:50%;font-size:10px;background:var(--danger,#e5484d);color:#fff;border:none;cursor:pointer;">✕</button>` : ''}
+</div>
 <input type="text" class="pkg-name" value="${escapeHtml(pkg.name)}" />
 <input type="number" class="pkg-amount" value="${pkg.amount}" min="0" placeholder="Amount" />
 <input type="number" class="pkg-bonus" value="${pkg.bonus}" min="0" placeholder="Bonus" />
@@ -1273,6 +1276,7 @@ document.addEventListener('change', function(e) {
       const data = await res.json();
       if (data.ok) {
         const label = input.closest('.pkg-icon-upload');
+        const wrap  = input.closest('.pkg-icon-wrap');
         if (label) {
           const imgEl = document.createElement('img');
           imgEl.src = '/static/uploads/' + data.filename;
@@ -1285,11 +1289,50 @@ document.addEventListener('change', function(e) {
           ni.style.cssText='position:absolute;inset:0;opacity:0;cursor:pointer;';
           label.appendChild(ni);
         }
+        // Add the "✕ remove" button now that a custom icon exists — it
+        // isn't in the initial HTML when there's no icon yet, so create
+        // it here on first successful upload if not already present.
+        if (wrap && !wrap.querySelector('.pkg-icon-remove-btn')) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'pkg-icon-remove-btn';
+          btn.dataset.packageId = packageId;
+          btn.title = 'លុប icon';
+          btn.textContent = '✕';
+          btn.style.cssText = 'position:absolute;top:-6px;right:-6px;width:16px;height:16px;padding:0;line-height:14px;border-radius:50%;font-size:10px;background:var(--danger,#e5484d);color:#fff;border:none;cursor:pointer;';
+          wrap.appendChild(btn);
+        }
         toast('Upload រូបភាព package ✓');
       } else { toast(data.error || 'Upload failed', true); }
     } catch(err) { toast('Upload failed', true); }
   };
   reader.readAsDataURL(file);
+});
+// Delete package icon — reverts the row back to the default "+" placeholder.
+document.addEventListener('click', async function (e) {
+  const btn = e.target.closest('.pkg-icon-remove-btn');
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const packageId = btn.dataset.packageId;
+  if (!packageId) return;
+  if (!confirm('លុប icon package នេះមែនទេ?')) return;
+  try {
+    const res = await csrfFetch('/api/admin/packages/' + packageId + '/icon', { method: 'DELETE' });
+    const data = await res.json();
+    if (data.ok) {
+      const wrap  = btn.closest('.pkg-icon-wrap');
+      const label = wrap ? wrap.querySelector('.pkg-icon-upload') : null;
+      if (label) {
+        label.innerHTML = '<span style="font-size:18px;color:var(--text-faint);">+</span>' +
+          '<input type="file" accept="image/jpeg,image/png,image/webp" class="pkg-icon-input" data-package-id="' + packageId + '" style="position:absolute;inset:0;opacity:0;cursor:pointer;" />';
+      }
+      btn.remove();
+      toast('បានលុប icon ✓');
+    } else {
+      toast(data.error || 'លុបបរាជ័យ', true);
+    }
+  } catch (err) { toast('លុបបរាជ័យ', true); }
 });
 })();
 </script>`;
