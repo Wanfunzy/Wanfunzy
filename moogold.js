@@ -96,20 +96,26 @@ async function fulfillWithMooGold(order) {
     return { ok: false, error: `Zone ID ត្រូវតែបញ្ចូលសម្រាប់ game នេះ (${order.gameName || order.gameId})` };
   }
 
-  // [FIX] MooGold's API requires the key "Zone ID" (with a space) for the
-  // server/zone value, NOT "Server". "User ID" (with space) is correct
-  // as-is and works fine. Sending "Server" caused MooGold to silently
-  // ignore the value entirely — account_details echoed back
-  // "Server ID": "" even though our payload's Server field was populated
-  // correctly — and the order was later refunded for incorrect details,
-  // despite the User ID + Zone ID pair being 100% correct (verified
-  // against the customer's own in-game profile screenshot: 592784466
-  // (10050), Cambodia/Phnom Penh).
+  // [FIX per MooGold CS] Free Fire's create_order requires the field
+  // name "Player ID" — NOT "User ID". MooGold's reply verbatim: "Fields
+  // entered are incorrect. For Free Fire, please use the 'Player ID'
+  // instead of the User ID." This was the actual cause of the recurring
+  // err_code 422 ("Product ID incorrect or not authorized") — the
+  // product/variation IDs were correct all along, only the field name
+  // was wrong. MLBB keeps "User ID" (confirmed working via real
+  // fulfillments). PUBG/HOK are left on "User ID" for now since their
+  // correct field name hasn't been confirmed yet — update here once
+  // MooGold CS confirms those too.
+  const isFF = (order.gameId || '').toLowerCase() === 'freefire' ||
+               (order.gameId || '').toLowerCase() === 'ff' ||
+               (order.gameName || '').toLowerCase().includes('free fire');
+  const playerIdField = isFF ? 'Player ID' : 'User ID';
+
   const orderData = {
     category:     1,
     'product-id': Number(order.moogoldProductId),
     quantity:     1,
-    'User ID':    String(order.playerId)
+    [playerIdField]: String(order.playerId)
   };
   // [FIX] Confirmed by MooGold CS: the correct field name for MLBB is
   // "Server ID" (with a space) — NOT "Server", "Zone ID", or "Zone_ID".
@@ -118,7 +124,7 @@ async function fulfillWithMooGold(order) {
   // if this ever needs to be made fully dynamic in the future.
   if (order.serverId) orderData['Server ID'] = String(order.serverId);
 
-  const logPayload = { 'product-id': order.moogoldProductId, 'User ID': order.playerId };
+  const logPayload = { 'product-id': order.moogoldProductId, [playerIdField]: order.playerId };
   if (order.serverId) logPayload['Server ID'] = order.serverId;
   console.log('[MooGold] create_order payload:', JSON.stringify(logPayload));
 
@@ -152,10 +158,12 @@ async function fulfillWithMooGold(order) {
 
 async function validatePlayerWithMooGold(productId, playerId, serverId) {
   if (!moogoldEnabled() || !productId) return { ok: null };
-  // [FIX] Confirmed field name: "Server ID" (per MooGold CS).
+  // Same field-name fix as create_order: Free Fire (product 7847) uses
+  // "Player ID", not "User ID".
+  const playerIdField = String(productId) === '7847' ? 'Player ID' : 'User ID';
   const payload = {
     path: 'product/validate',
-    data: { 'product-id': String(productId), 'User ID': String(playerId), ...(serverId ? { 'Server ID': String(serverId) } : {}) }
+    data: { 'product-id': String(productId), [playerIdField]: String(playerId), ...(serverId ? { 'Server ID': String(serverId) } : {}) }
   };
   try {
     const result = await moogoldRequest('product/validate', payload, payload);
