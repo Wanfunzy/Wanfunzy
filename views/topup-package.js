@@ -140,7 +140,7 @@ ${logoHtml}
 </div>
 
 <div class="sp-panel" id="panelStep1">
-<div class="form-row" id="formRow">
+<div class="form-row${needsServerIdSSR ? '' : ' form-row-single'}" id="formRow">
 <div class="field">
 <label for="playerId">Player ID</label>
 <input type="text" id="playerId" name="playerId" placeholder="${t(lang, 'ph_player_id')}" inputmode="numeric" autocomplete="off" />
