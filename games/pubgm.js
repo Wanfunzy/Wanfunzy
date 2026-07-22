@@ -34,7 +34,7 @@ async function validate(playerId, serverId) {
   // product on validate or (likely) create_order either. Block until
   // MooGold enables it, same reasoning as Free Fire.
   console.log('[Validate] BLOCKED (MooGold not authorized for this product) — game: pubgm | playerId:', playerId);
-  return { ok: false, message: 'PUBG Mobile បណ្តោះអាសន្នមិនអាចទិញបានទេ (កំពុងរង់ចាំ MooGold ដោះស្រាយ)។ សូមទាក់ទង admin ដើម្បីជួយ។' };
+  return { ok: false, message: 'PUBG Mobile បណ្តោះអាសន្នមិនអាចទិញបានទេ។ សូមទាក់ទង admin ដើម្បីជួយ។' };
 }
 
 module.exports = { productId: PRODUCT_ID, requiresServerId: REQUIRES_SERVER_ID, validate };
