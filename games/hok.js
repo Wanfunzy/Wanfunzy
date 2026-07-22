@@ -18,7 +18,7 @@ const PRODUCT_ID         = '5177311';
 const REQUIRES_SERVER_ID = false;
 
 async function validate(playerId, serverId) {
-  console.log('[Validate] game: hok | productId:', PRODUCT_ID, '| playerId:', playerId, '| serverId:', serverId || '(none)');
+  console.log('[Validate] game: hok | productId:', PRODUCT_ID, '| playerId:', playerId);
   if (moogoldEnabled()) {
     const mgResult = await validatePlayerWithMooGold(PRODUCT_ID, playerId, serverId);
     if (mgResult.ok === true) {
@@ -32,8 +32,11 @@ async function validate(playerId, serverId) {
     console.log('[Validate][MooGold] not authorized for product:', PRODUCT_ID);
   }
 
-  console.log('[Validate] ACCEPTED (format-only, no verification available) — game: hok | playerId:', playerId);
-  return { ok: true, username: '' };
+  // [POLICY per owner — updated] MooGold not authorized for this
+  // product on validate or (likely) create_order either. Block until
+  // MooGold enables it, same reasoning as Free Fire/PUBG.
+  console.log('[Validate] BLOCKED (MooGold not authorized for this product) — game: hok | playerId:', playerId);
+  return { ok: false, message: 'Honor of Kings បណ្តោះអាសន្នមិនអាចទិញបានទេ (កំពុងរង់ចាំ MooGold ដោះស្រាយ)។ សូមទាក់ទង admin ដើម្បីជួយ។' };
 }
 
 module.exports = { productId: PRODUCT_ID, requiresServerId: REQUIRES_SERVER_ID, validate };
