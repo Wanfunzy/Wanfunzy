@@ -614,6 +614,14 @@ button, input, select, textarea {
   margin-bottom: 16px;
 }
 
+/* Free Fire, PUBG, HOK don't collect a Server ID — Player ID should
+   expand to fill the full row instead of leaving the second grid
+   column empty (display:none on the hidden field doesn't shrink a
+   fixed 1fr 1fr grid-template-columns on its own). */
+.form-row.form-row-single {
+  grid-template-columns: 1fr;
+}
+
 .field {
   margin-bottom: 16px;
 }
@@ -636,8 +644,8 @@ button, input, select, textarea {
   background: var(--void);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  padding: 13px 15px;
-  font-size: 15px;
+  padding: 17px 15px;
+  font-size: 16px;
   transition: border-color 0.18s var(--ease), box-shadow 0.18s var(--ease);
 }
 
@@ -1873,6 +1881,9 @@ a.gem-card {
   #formRow.form-row {
     grid-template-columns: 1fr 1fr;
     gap: 8px;
+  }
+  #formRow.form-row.form-row-single {
+    grid-template-columns: 1fr;
   }
   #formRow.form-row .field { margin-bottom: 0; }
   #formRow.form-row .field label {
