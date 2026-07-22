@@ -65,22 +65,32 @@ async function validate(playerId, serverId) {
     console.log('[Validate][FF Worker] FF_WORKER_URL not set — falling back to MooGold (unreliable for FF)');
   }
 
-  console.log('[Validate] game: freefire | productId:', PRODUCT_ID, '| playerId:', playerId, '| serverId:', serverId || '(none)');
+  console.log('[Validate] game: freefire | productId:', PRODUCT_ID, '| playerId:', playerId);
   if (moogoldEnabled()) {
     const mgResult = await validatePlayerWithMooGold(PRODUCT_ID, playerId, serverId);
-    if (mgResult.ok === true) {
-      console.log('[Validate][MooGold] SUCCESS — game: freefire | username:', mgResult.username || '(none)');
-      return { ok: true, username: mgResult.username || '' };
+    // [CONFIRMED via production logs] MooGold's Free Fire validate always
+    // returns status:true with username:null, regardless of whether the
+    // Player ID is real or made up — it is NOT a real check. So ok:true
+    // with no username must NOT be treated as a pass here.
+    if (mgResult.ok === true && mgResult.username) {
+      console.log('[Validate][MooGold] SUCCESS — game: freefire | username:', mgResult.username);
+      return { ok: true, username: mgResult.username };
     }
     if (mgResult.ok === false) {
       console.log('[Validate][MooGold] BLOCKED — game: freefire |', mgResult.message);
       return { ok: false, message: mgResult.message };
     }
-    console.log('[Validate][MooGold] not authorized for product:', PRODUCT_ID);
+    console.log('[Validate][MooGold] not authorized or no real username for product:', PRODUCT_ID);
   }
 
-  console.log('[Validate] ACCEPTED (format-only, no verification available) — game: freefire | playerId:', playerId);
-  return { ok: true, username: '' };
+  // [POLICY per owner — updated] Both validate AND create_order are
+  // unauthorized on this MooGold account for Free Fire (confirmed via
+  // err_code 422 on a real order, even with a verified-correct
+  // variation_id). Accepting purchases that can't be fulfilled just
+  // creates manual-refund work, so block again until MooGold enables
+  // this product for order creation.
+  console.log('[Validate] BLOCKED (MooGold not authorized for this product — validate or fulfill) — game: freefire | playerId:', playerId);
+  return { ok: false, message: 'Free Fire បណ្តោះអាសន្នមិនអាចទិញបានទេ (កំពុងរង់ចាំ MooGold ដោះស្រាយ)។ សូមទាក់ទង admin ដើម្បីជួយ។' };
 }
 
 module.exports = { productId: PRODUCT_ID, requiresServerId: REQUIRES_SERVER_ID, validate };
