@@ -91,7 +91,7 @@ async function validate(playerId, serverId) {
   // creates manual-refund work, so block again until MooGold enables
   // this product for order creation.
   console.log('[Validate] BLOCKED (MooGold not authorized for this product — validate or fulfill) — game: freefire | playerId:', playerId);
-  return { ok: false, message: 'Free Fire បណ្តោះអាសន្នមិនអាចទិញបានទេ (កំពុងរង់ចាំ MooGold ដោះស្រាយ)។ សូមទាក់ទង admin ដើម្បីជួយ។' };
+  return { ok: false, message: 'Free Fire បណ្តោះអាសន្នមិនអាចទិញបានទេ។ សូមទាក់ទង admin ដើម្បីជួយ។' };
 }
 
 module.exports = { productId: PRODUCT_ID, requiresServerId: REQUIRES_SERVER_ID, validate };
