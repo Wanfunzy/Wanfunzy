@@ -1,14 +1,14 @@
 // games/hok.js — Honor of Kings validation.
 // MOOGOLD_PRODUCT_ID 5177311 — reseller.moogold.com/product.php?product=5177311&category=50
 //
-// MooGold's validate endpoint is not authorized for this product on the
-// account at all ("Validation is not available for this product. Kindly
-// contact our CS to add them in."). Manually confirmed on moogold.com
-// that no nickname/validation popup appears for HOK at all (unlike Free
-// Fire, which does show one) — validation genuinely isn't wired up for
-// this product yet, on MooGold's side, not just the API.
-// [POLICY per owner] Any correctly-formatted Player ID is accepted with
-// no username shown, same as freefire/pubgm.
+// Same trust model as games/mlbb.js: only a genuine MooGold pass counts
+// (real username, or an explicit status:false to block). MooGold's
+// validate endpoint is currently "not authorized" for this product on
+// the account at all — confirmed both via the API and manually on
+// moogold.com (no nickname/validation popup appears for HOK at all,
+// unlike Free Fire). This correctly falls through to block below. Once
+// MooGold authorizes it, real validation will start flowing through
+// automatically — no further code changes needed here.
 
 'use strict';
 
