@@ -103,13 +103,21 @@ async function fulfillWithMooGold(order) {
   // err_code 422 ("Product ID incorrect or not authorized") — the
   // product/variation IDs were correct all along, only the field name
   // was wrong. MLBB keeps "User ID" (confirmed working via real
-  // fulfillments). PUBG/HOK are left on "User ID" for now since their
-  // correct field name hasn't been confirmed yet — update here once
-  // MooGold CS confirms those too.
-  const isFF = (order.gameId || '').toLowerCase() === 'freefire' ||
-               (order.gameId || '').toLowerCase() === 'ff' ||
-               (order.gameName || '').toLowerCase().includes('free fire');
-  const playerIdField = isFF ? 'Player ID' : 'User ID';
+  // fulfillments — do not change).
+  //
+  // [TEMP TEST per owner] PUBG and HOK are ALSO getting err_code 422, but
+  // "Player ID" is suspected wrong for them too — testing "Player UID"
+  // instead (owner's hypothesis) since MooGold's docs say field names are
+  // non-uniform per product. If this doesn't work either, the safest way
+  // to get the real answer is to ask MooGold CS directly, or call
+  // product/product_detail's field list for products 6963 / 5177311.
+  const gid = (order.gameId || '').toLowerCase();
+  const gname = (order.gameName || '').toLowerCase();
+  const isFreeFire = gid === 'freefire' || gid === 'ff' || gname.includes('free fire');
+  const isPubgOrHok =
+    gid === 'pubgm' || gid === 'pubg' || gname.includes('pubg') ||
+    gid === 'hok' || gname.includes('honor of kings');
+  const playerIdField = isFreeFire ? 'Player ID' : (isPubgOrHok ? 'Player UID' : 'User ID');
 
   const orderData = {
     category:     1,
