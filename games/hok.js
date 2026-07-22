@@ -32,11 +32,14 @@ async function validate(playerId, serverId) {
     console.log('[Validate][MooGold] not authorized for product:', PRODUCT_ID);
   }
 
-  // [POLICY per owner — updated] MooGold not authorized for this
-  // product on validate or (likely) create_order either. Block until
-  // MooGold enables it, same reasoning as Free Fire/PUBG.
-  console.log('[Validate] BLOCKED (MooGold not authorized for this product) — game: hok | playerId:', playerId);
-  return { ok: false, message: 'Honor of Kings បណ្តោះអាសន្នមិនអាចទិញបានទេ។ សូមទាក់ទង admin ដើម្បីជួយ។' };
+  // [TEMP TEST per owner] Same hypothesis as PUBG — testing whether
+  // create_order for HOK has a wrong-field-name issue (like Free Fire's
+  // "Player ID" vs "User ID" fix) rather than a genuine account-level
+  // authorization gap. Accepting format-valid IDs through temporarily so
+  // a real order can reach fulfillment and reveal the actual
+  // create_order response.
+  console.log('[Validate] ACCEPTED (TEMP TEST — checking if create_order has a field-name issue like FF did) — game: hok | playerId:', playerId);
+  return { ok: true, username: '' };
 }
 
 module.exports = { productId: PRODUCT_ID, requiresServerId: REQUIRES_SERVER_ID, validate };
