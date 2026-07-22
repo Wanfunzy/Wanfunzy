@@ -105,19 +105,15 @@ async function fulfillWithMooGold(order) {
   // was wrong. MLBB keeps "User ID" (confirmed working via real
   // fulfillments — do not change).
   //
-  // [TEMP TEST per owner] PUBG and HOK are ALSO getting err_code 422, but
-  // "Player ID" is suspected wrong for them too — testing "Player UID"
-  // instead (owner's hypothesis) since MooGold's docs say field names are
-  // non-uniform per product. If this doesn't work either, the safest way
-  // to get the real answer is to ask MooGold CS directly, or call
-  // product/product_detail's field list for products 6963 / 5177311.
+  // [CONFIRMED via testing] PUBG and HOK are NOT a field-name issue —
+  // tried "User ID", "Player ID", and "Player UID" for both, all still
+  // return err_code 422. They stay on "User ID" (doesn't matter which,
+  // since validate blocks them before create_order is ever reached) —
+  // this is a genuine account-level authorization gap, pending MooGold CS.
   const gid = (order.gameId || '').toLowerCase();
   const gname = (order.gameName || '').toLowerCase();
   const isFreeFire = gid === 'freefire' || gid === 'ff' || gname.includes('free fire');
-  const isPubgOrHok =
-    gid === 'pubgm' || gid === 'pubg' || gname.includes('pubg') ||
-    gid === 'hok' || gname.includes('honor of kings');
-  const playerIdField = isFreeFire ? 'Player ID' : (isPubgOrHok ? 'Player UID' : 'User ID');
+  const playerIdField = isFreeFire ? 'Player ID' : 'User ID';
 
   const orderData = {
     category:     1,
