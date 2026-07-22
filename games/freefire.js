@@ -1,15 +1,16 @@
 // games/freefire.js — Free Fire validation.
 // MOOGOLD_PRODUCT_ID 7847 — reseller.moogold.com/product.php?product=7847&category=50
 //
-// MooGold's own Free Fire validate does NOT actually check if the account
-// exists (always status:true, username:null). A Cloudflare Worker
-// (ff-worker.js) is the only path that can return a genuine username, but
-// its current endpoint is broken (confirmed dead — see conversation
-// history), so its "not found" results aren't trustworthy right now.
-// [POLICY per owner] Rather than blocking Free Fire entirely while this
-// gets sorted out, any correctly-formatted Player ID is accepted with no
-// username shown — same trust level FF/PUBG/HOK had before real
-// verification was attempted.
+// Same trust model as games/mlbb.js: a Worker or MooGold result only
+// counts as a genuine pass if it comes with a real username; anything
+// else (false, no username, or "not authorized") blocks the purchase.
+// MooGold's own Free Fire validate currently always returns status:true
+// with username:null (confirmed via production logs) — that is NOT a
+// real check, so it correctly falls through to the block below rather
+// than passing. Once MooGold authorizes real validation for this
+// product (or the FF Worker's endpoint is fixed), a genuine username
+// will start flowing through automatically — no further code changes
+// needed here.
 
 'use strict';
 
