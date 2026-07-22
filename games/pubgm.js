@@ -30,11 +30,16 @@ async function validate(playerId, serverId) {
     console.log('[Validate][MooGold] not authorized for product:', PRODUCT_ID);
   }
 
-  // [POLICY per owner — updated] MooGold not authorized for this
-  // product on validate or (likely) create_order either. Block until
-  // MooGold enables it, same reasoning as Free Fire.
-  console.log('[Validate] BLOCKED (MooGold not authorized for this product) — game: pubgm | playerId:', playerId);
-  return { ok: false, message: 'PUBG Mobile បណ្តោះអាសន្នមិនអាចទិញបានទេ។ សូមទាក់ទង admin ដើម្បីជួយ។' };
+  // [TEMP TEST per owner] Testing the hypothesis that PUBG's
+  // create_order might have the same "wrong field name" issue Free Fire
+  // had (validate said "not authorized" but the real fix was using
+  // "Player ID" instead of "User ID" for create_order) rather than a
+  // genuine account-level authorization gap. Accepting format-valid IDs
+  // through temporarily so a real order can reach fulfillment and reveal
+  // the actual create_order response. Revert to hard block below if this
+  // turns out to be a genuine authorization gap after all.
+  console.log('[Validate] ACCEPTED (TEMP TEST — checking if create_order has a field-name issue like FF did) — game: pubgm | playerId:', playerId);
+  return { ok: true, username: '' };
 }
 
 module.exports = { productId: PRODUCT_ID, requiresServerId: REQUIRES_SERVER_ID, validate };
