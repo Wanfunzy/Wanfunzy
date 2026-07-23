@@ -162,7 +162,7 @@ function renderUploadBox({ label, hint, previewSrc, uploadEndpoint, deleteEndpoi
 </div>`;
 }
 
-function renderGameSection(game, packages, gameLogos, cardBackgrounds, sectionImages, packageIconImages, cardBackgroundSlides) {
+function renderGameSection(game, packages, gameLogos, cardBackgrounds, sectionImages, packageIconImages, cardBackgroundSlides, sectionTitles) {
   const gamePackages = packages.filter((p) => p.gameId === game.id);
   const customLogo = gameLogos[game.id];
   const logoPreview = customLogo ? `/static/uploads/${customLogo}` : null;
@@ -170,14 +170,20 @@ function renderGameSection(game, packages, gameLogos, cardBackgrounds, sectionIm
   const cardBgPreview = customCardBg ? `/static/uploads/${customCardBg}` : null;
   const slides = ((cardBackgroundSlides || {})[game.id] || []);
   const secImgs = (sectionImages || {})[game.id] || {};
+  const secTitles = (sectionTitles || {})[game.id] || {};
 
   function renderSectionBox(sectionKey, sectionLabel) {
     const img = secImgs[sectionKey];
     const imgPreview = img ? `/static/uploads/${img}` : null;
     const inputId = `sectionImgInput-${sectionKey}-${game.id}`;
+    const customTitle = secTitles[sectionKey] || '';
     return `
 <div style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px;">
 <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;font-weight:600;">${escapeHtml(sectionLabel)}</div>
+<div style="margin-bottom:10px;">
+<label style="display:block;font-size:11px;color:var(--text-faint);margin-bottom:4px;">ចំណងជើងផ្នែកនេះ (បង្ហាញលើ storefront) — ទុកទទេ = default ដូចខាងលើ</label>
+<input type="text" class="input section-title-input" data-section="${sectionKey}" data-game-id="${game.id}" value="${escapeHtml(customTitle)}" placeholder="${escapeHtml(sectionLabel)}" maxlength="40" style="width:100%;" />
+</div>
 <div class="upload-box upload-box-inline" data-upload-endpoint="/api/admin/settings/section-image/${sectionKey}/${game.id}" data-delete-endpoint="/api/admin/settings/section-image/${sectionKey}/${game.id}">
 <div class="upload-box-body">
   ${imgPreview ? `<img src="${imgPreview}" class="upload-preview upload-preview-wide" style="height:52px;" />` : `<div class="upload-preview upload-preview-empty upload-preview-wide" style="height:52px;">គ្មានរូបភាព</div>`}
@@ -321,7 +327,7 @@ function renderAdminDashboard({ orders, packages, games, settings, filter, usern
 <p>${isDeletedView ? 'គ្មាន orders ដែលបានលុបទេ' : 'មិនទាន់មាន Order ទេនៅពេលនេះ'}</p>
 </div>`;
 
-  const gameSectionsHtml = games.map((g) => renderGameSection(g, packages, gameLogos, cardBackgrounds, sectionImages, packageIconImages, settings.cardBackgroundSlides)).join('');
+  const gameSectionsHtml = games.map((g) => renderGameSection(g, packages, gameLogos, cardBackgrounds, sectionImages, packageIconImages, settings.cardBackgroundSlides, settings.sectionTitles)).join('');
 
   const profileUploadBox = renderUploadBox({
     label: 'Profile Picture (Logo)',
@@ -1188,6 +1194,24 @@ setTimeout(() => location.reload(), 600);
 });
 // ---------- Per-game Banner Slideshow (multi-image, max 8) ----------
 // ---------- MooGold Variation ID lookup (per game) ----------
+// ---------- Custom section title (per game, per section) ----------
+document.querySelectorAll('.section-title-input').forEach(function (input) {
+let lastSaved = input.value;
+input.addEventListener('blur', async function () {
+if (input.value === lastSaved) return;
+const section = input.dataset.section;
+const gameId = input.dataset.gameId;
+try {
+const res = await csrfFetch('/api/admin/settings/section-title/' + section + '/' + gameId, {
+method: 'POST', headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ title: input.value })
+});
+const data = await res.json();
+if (data.ok) { lastSaved = input.value; toast('រក្សាទុកចំណងជើងផ្នែក ✓'); }
+else toast(data.error || 'រក្សាទុកបរាជ័យ', true);
+} catch (err) { toast('រក្សាទុកបរាជ័យ', true); }
+});
+});
 document.querySelectorAll('.moogold-variations-btn').forEach(function (btn) {
 btn.addEventListener('click', async function () {
 const gameId = btn.dataset.gameId;
