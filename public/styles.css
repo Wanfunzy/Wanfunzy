@@ -1996,7 +1996,6 @@ a.gem-card {
 }
 
 .sp-panel.sp-locked {
-  opacity: 0.45;
   pointer-events: none;
 }
 
