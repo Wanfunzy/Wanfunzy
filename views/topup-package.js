@@ -109,16 +109,21 @@ ${slideDivs}
   const bonusDiamondPkgs = packages.filter(byCategory('bonusDiamond')).sort((a, b) => (a.price || 0) - (b.price || 0));
   const pureDiamondPkgs  = packages.filter(byCategory('pureDiamond')).sort((a, b) => (a.price || 0) - (b.price || 0));
   const sectionImages = (settings && settings.sectionImages && settings.sectionImages[game.id]) || {};
+  const sectionTitlesForGame = (settings && settings.sectionTitles && settings.sectionTitles[game.id]) || {};
   const packageIconImages = (settings && settings.packageIconImages) || {};
   const sectionEmoji  = (settings && settings.sectionEmoji  && settings.sectionEmoji[game.id])  || {};
   const passesImg = sectionImages.passes || null;
   const firstImg  = sectionImages.firstTopup || null;
   const bonusImg  = sectionImages.bonusDiamond || null;
   const priceImg  = sectionImages.pureDiamond  || null;
-  const passesBand = passesPkgs.length ? `\n<div class="sp-band"><span>Special Passes &amp; Packs</span></div>\n<div class="sp-pkg-grid">\n${passesPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || passesImg)).join('\n')}\n</div>` : '';
-  const firstTopupBand = firstTopupPkgs.length ? `\n<div class="sp-band"><span>First Top-Up Bonuses</span></div>\n<div class="sp-pkg-grid">\n${firstTopupPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || firstImg)).join('\n')}\n</div>` : '';
-  const bonusDiamondBand = bonusDiamondPkgs.length ? `\n<div class="sp-band"><span>Standard Diamond Packs</span></div>\n<div class="sp-pkg-grid">\n${bonusDiamondPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || bonusImg)).join('\n')}\n</div>` : '';
-  const pureDiamondBand = pureDiamondPkgs.length ? `\n<div class="sp-band"><span>Sorted by Price</span></div>\n<div class="sp-pkg-grid">\n${pureDiamondPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || priceImg)).join('\n')}\n</div>` : '';
+  const passesTitle = escapeHtml(sectionTitlesForGame.passes       || 'Special Passes & Packs');
+  const firstTitle   = escapeHtml(sectionTitlesForGame.firstTopup  || 'First Top-Up Bonuses');
+  const bonusTitle   = escapeHtml(sectionTitlesForGame.bonusDiamond || 'Standard Diamond Packs');
+  const priceTitle   = escapeHtml(sectionTitlesForGame.pureDiamond || 'Sorted by Price');
+  const passesBand = passesPkgs.length ? `\n<div class="sp-band"><span>${passesTitle}</span></div>\n<div class="sp-pkg-grid">\n${passesPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || passesImg)).join('\n')}\n</div>` : '';
+  const firstTopupBand = firstTopupPkgs.length ? `\n<div class="sp-band"><span>${firstTitle}</span></div>\n<div class="sp-pkg-grid">\n${firstTopupPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || firstImg)).join('\n')}\n</div>` : '';
+  const bonusDiamondBand = bonusDiamondPkgs.length ? `\n<div class="sp-band"><span>${bonusTitle}</span></div>\n<div class="sp-pkg-grid">\n${bonusDiamondPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || bonusImg)).join('\n')}\n</div>` : '';
+  const pureDiamondBand = pureDiamondPkgs.length ? `\n<div class="sp-band"><span>${priceTitle}</span></div>\n<div class="sp-pkg-grid">\n${pureDiamondPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || priceImg)).join('\n')}\n</div>` : '';
   const header = renderSiteHeader({ profileImage, lang, t, settings, showChangeGame: true });
 
   const needsServerIdSSR = (game.requiresServerId || game.id === 'mlbb' || (game.name||'').toLowerCase().includes('mobile legend'));
@@ -334,7 +339,6 @@ validateBtn.addEventListener('click', async function () {
   validateBtn.disabled = true;
   document.getElementById('playerId').readOnly = true;
   if (needsServerId) document.getElementById('serverId').readOnly = true;
-  panelStep2.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
 document.querySelectorAll('.sp-pkg-card').forEach(function (card) {
