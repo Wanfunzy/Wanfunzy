@@ -1459,6 +1459,25 @@ async function handleSetSectionEmoji(req, res, params) {
   data.settings.sectionEmoji[game.id][params.section] = emoji; db.writeDB(data); sendJSON(res, 200, { ok: true, emoji });
 }
 
+// Per-game, per-section custom title (e.g. rename "Sorted by Price" to
+// something else for a specific game) shown on the storefront. Same
+// keyed-by-game-id pattern as sectionImages/sectionEmoji above. An empty
+// title clears the override back to the hardcoded default label.
+async function handleSetSectionTitle(req, res, params) {
+  const session = getSession(req); if (!session) return sendJSON(res, 401, { ok: false, error: 'Unauthorized' });
+  if (!requireCsrf(req, res, session)) return;
+  if (!SECTION_KEYS.includes(params.section)) return sendJSON(res, 400, { ok: false, error: 'Invalid section' });
+  const raw   = await readBody(req); const body = parseBody(req, raw);
+  const title = (body.title || '').trim().slice(0, 40);
+  const data = db.readDB(); const game = data.games.find(g => g.id === params.gameId);
+  if (!game) return sendJSON(res, 404, { ok: false, error: 'Game not found' });
+  if (!data.settings.sectionTitles) data.settings.sectionTitles = {};
+  if (!data.settings.sectionTitles[game.id]) data.settings.sectionTitles[game.id] = {};
+  if (title) data.settings.sectionTitles[game.id][params.section] = title;
+  else delete data.settings.sectionTitles[game.id][params.section];
+  db.writeDB(data); sendJSON(res, 200, { ok: true, title: data.settings.sectionTitles[game.id][params.section] || null });
+}
+
 async function handleRemoveCustomImage(req, res, params) {
   const session = getSession(req); if (!session) return sendJSON(res, 401, { ok: false, error: 'Unauthorized' });
   if (!requireCsrf(req, res, session)) return;
@@ -1600,6 +1619,8 @@ const server = http.createServer(async (req, res) => {
     if (m && method === 'DELETE') return handleDeleteSectionImage(req, res, { section: m[1], gameId: m[2] });
     m = pathname.match(/^\/api\/admin\/settings\/section-emoji\/(passes|firstTopup|bonusDiamond|pureDiamond)\/([^/]+)$/);
     if (m && method === 'POST')   return handleSetSectionEmoji(req, res, { section: m[1], gameId: m[2] });
+    m = pathname.match(/^\/api\/admin\/settings\/section-title\/(passes|firstTopup|bonusDiamond|pureDiamond)\/([^/]+)$/);
+    if (m && method === 'POST')   return handleSetSectionTitle(req, res, { section: m[1], gameId: m[2] });
     m = pathname.match(/^\/api\/admin\/games\/([^/]+)\/currency-emoji$/);
     if (m && method === 'POST')   return handleUpdateGameCurrencyEmoji(req, res, { gameId: m[1] });
 
