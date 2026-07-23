@@ -116,14 +116,14 @@ ${slideDivs}
   const firstImg  = sectionImages.firstTopup || null;
   const bonusImg  = sectionImages.bonusDiamond || null;
   const priceImg  = sectionImages.pureDiamond  || null;
-  const passesTitle = escapeHtml(sectionTitlesForGame.passes       || 'Special Passes & Packs');
-  const firstTitle   = escapeHtml(sectionTitlesForGame.firstTopup  || 'First Top-Up Bonuses');
-  const bonusTitle   = escapeHtml(sectionTitlesForGame.bonusDiamond || 'Standard Diamond Packs');
-  const priceTitle   = escapeHtml(sectionTitlesForGame.pureDiamond || 'Sorted by Price');
-  const passesBand = passesPkgs.length ? `\n<div class="sp-band"><span>${passesTitle}</span></div>\n<div class="sp-pkg-grid">\n${passesPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || passesImg)).join('\n')}\n</div>` : '';
-  const firstTopupBand = firstTopupPkgs.length ? `\n<div class="sp-band"><span>${firstTitle}</span></div>\n<div class="sp-pkg-grid">\n${firstTopupPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || firstImg)).join('\n')}\n</div>` : '';
-  const bonusDiamondBand = bonusDiamondPkgs.length ? `\n<div class="sp-band"><span>${bonusTitle}</span></div>\n<div class="sp-pkg-grid">\n${bonusDiamondPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || bonusImg)).join('\n')}\n</div>` : '';
-  const pureDiamondBand = pureDiamondPkgs.length ? `\n<div class="sp-band"><span>${priceTitle}</span></div>\n<div class="sp-pkg-grid">\n${pureDiamondPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || priceImg)).join('\n')}\n</div>` : '';
+  const passesTitle = escapeHtml(sectionTitlesForGame.passes       || '');
+  const firstTitle   = escapeHtml(sectionTitlesForGame.firstTopup  || '');
+  const bonusTitle   = escapeHtml(sectionTitlesForGame.bonusDiamond || '');
+  const priceTitle   = escapeHtml(sectionTitlesForGame.pureDiamond || '');
+  const passesBand = (passesPkgs.length && passesTitle) ? `\n<div class="sp-band"><span>${passesTitle}</span></div>\n<div class="sp-pkg-grid">\n${passesPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || passesImg)).join('\n')}\n</div>` : (passesPkgs.length ? `\n<div class="sp-pkg-grid">\n${passesPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || passesImg)).join('\n')}\n</div>` : '');
+  const firstTopupBand = (firstTopupPkgs.length && firstTitle) ? `\n<div class="sp-band"><span>${firstTitle}</span></div>\n<div class="sp-pkg-grid">\n${firstTopupPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || firstImg)).join('\n')}\n</div>` : (firstTopupPkgs.length ? `\n<div class="sp-pkg-grid">\n${firstTopupPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || firstImg)).join('\n')}\n</div>` : '');
+  const bonusDiamondBand = (bonusDiamondPkgs.length && bonusTitle) ? `\n<div class="sp-band"><span>${bonusTitle}</span></div>\n<div class="sp-pkg-grid">\n${bonusDiamondPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || bonusImg)).join('\n')}\n</div>` : (bonusDiamondPkgs.length ? `\n<div class="sp-pkg-grid">\n${bonusDiamondPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || bonusImg)).join('\n')}\n</div>` : '');
+  const pureDiamondBand = (pureDiamondPkgs.length && priceTitle) ? `\n<div class="sp-band"><span>${priceTitle}</span></div>\n<div class="sp-pkg-grid">\n${pureDiamondPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || priceImg)).join('\n')}\n</div>` : (pureDiamondPkgs.length ? `\n<div class="sp-pkg-grid">\n${pureDiamondPkgs.map((p) => renderPkgCard(p, game, packageIconImages[p.id] || priceImg)).join('\n')}\n</div>` : '');
   const header = renderSiteHeader({ profileImage, lang, t, settings, showChangeGame: true });
 
   const needsServerIdSSR = (game.requiresServerId || game.id === 'mlbb' || (game.name||'').toLowerCase().includes('mobile legend'));
@@ -319,7 +319,7 @@ validateBtn.addEventListener('click', async function () {
     // MooGold confirmed — show real username and unlock.
     var validateHint = document.getElementById('err-validate');
     if (validateHint) {
-      validateHint.textContent = '✅ ' + (vData.username || 'Player ID ត្រឹមត្រូវ');
+      validateHint.textContent = vData.username ? ('Your Name : ' + vData.username) : 'Player ID ត្រឹមត្រូវ';
       validateHint.style.color = '#4ade80';
       validateHint.style.fontWeight = 'bold';
       validateHint.classList.add('show');
