@@ -30,14 +30,12 @@ async function validate(playerId, serverId) {
     console.log('[Validate][MooGold] not authorized for product:', PRODUCT_ID);
   }
 
-  // [CONFIRMED via testing] Tried "User ID", "Player ID", and "Player
-  // UID" field names for create_order — all still return err_code 422
-  // "not yet been authorized". This rules out a field-name issue (unlike
-  // Free Fire, where "Player ID" was the actual fix) — PUBG genuinely
-  // has an account-level authorization gap on MooGold's side. Blocking
-  // until MooGold CS confirms this is enabled.
-  console.log('[Validate] BLOCKED (confirmed account-level authorization gap, not a field-name issue) — game: pubgm | playerId:', playerId);
-  return { ok: false, message: 'PUBG Mobile បណ្តោះអាសន្នមិនអាចទិញបានទេ។ សូមទាក់ទង admin ដើម្បីជួយ។' };
+  // [FIX per MooGold CS] Confirmed "Player ID" is the correct field name
+  // for PUBG's create_order too (same fix as Free Fire). Re-enabling
+  // format-only accept temporarily to push a real test order through and
+  // confirm the fix works end-to-end.
+  console.log('[Validate] ACCEPTED (TEMP TEST — confirming "Player ID" fix for create_order) — game: pubgm | playerId:', playerId);
+  return { ok: true, username: '' };
 }
 
 module.exports = { productId: PRODUCT_ID, requiresServerId: REQUIRES_SERVER_ID, validate };
