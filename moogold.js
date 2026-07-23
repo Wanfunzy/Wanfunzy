@@ -105,15 +105,18 @@ async function fulfillWithMooGold(order) {
   // was wrong. MLBB keeps "User ID" (confirmed working via real
   // fulfillments — do not change).
   //
-  // [CONFIRMED via testing] PUBG and HOK are NOT a field-name issue —
-  // tried "User ID", "Player ID", and "Player UID" for both, all still
-  // return err_code 422. They stay on "User ID" (doesn't matter which,
-  // since validate blocks them before create_order is ever reached) —
-  // this is a genuine account-level authorization gap, pending MooGold CS.
+  // [FIX per MooGold CS] Same fix confirmed for PUBG and HOK — MooGold
+  // replied with the identical message ("please use the 'Player ID'
+  // instead of the User ID") for these two products too. Earlier testing
+  // had jumped straight to trying "Player UID" without properly testing
+  // plain "Player ID" first, which is why this wasn't caught sooner.
   const gid = (order.gameId || '').toLowerCase();
   const gname = (order.gameName || '').toLowerCase();
-  const isFreeFire = gid === 'freefire' || gid === 'ff' || gname.includes('free fire');
-  const playerIdField = isFreeFire ? 'Player ID' : 'User ID';
+  const usesPlayerIdField =
+    gid === 'freefire' || gid === 'ff' || gname.includes('free fire') ||
+    gid === 'pubgm' || gid === 'pubg' || gname.includes('pubg') ||
+    gid === 'hok' || gname.includes('honor of kings');
+  const playerIdField = usesPlayerIdField ? 'Player ID' : 'User ID';
 
   const orderData = {
     category:     1,
@@ -164,7 +167,8 @@ async function validatePlayerWithMooGold(productId, playerId, serverId) {
   if (!moogoldEnabled() || !productId) return { ok: null };
   // Same field-name fix as create_order: Free Fire (product 7847) uses
   // "Player ID", not "User ID".
-  const playerIdField = String(productId) === '7847' ? 'Player ID' : 'User ID';
+  const pid = String(productId);
+  const playerIdField = (pid === '7847' || pid === '6963' || pid === '5177311') ? 'Player ID' : 'User ID';
   const payload = {
     path: 'product/validate',
     data: { 'product-id': String(productId), [playerIdField]: String(playerId), ...(serverId ? { 'Server ID': String(serverId) } : {}) }
